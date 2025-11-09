@@ -1,0 +1,5 @@
+{
+  "name": "Alumasa Controle do Almoxarifado",
+  "description": "A comprehensive web application for warehouse management, handling stock entries, exits, inventory tracking, and reporting for Alumasa.",
+  "requestFramePermissions": []
+}
