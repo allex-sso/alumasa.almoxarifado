@@ -1,8 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Page, User } from '../types';
-import { DashboardIcon, StockIcon, EntryIcon, ExitIcon, ReportsIcon, LogoutIcon, MenuIcon, CloseIcon, UserIcon, CameraIcon, InventoryIcon, BackupIcon } from './icons/Icons';
+import { Page, User, Item } from '../types';
+import { DashboardIcon, StockIcon, EntryIcon, ExitIcon, ReportsIcon, LogoutIcon, MenuIcon, CloseIcon, UserIcon, CameraIcon, InventoryIcon, BackupIcon, SearchIcon } from './icons/Icons';
 import Modal from './ui/Modal';
 import Button from './ui/Button';
+import Input from './ui/Input';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -12,6 +13,8 @@ interface LayoutProps {
   setActivePage: (page: Page) => void;
   onUpdateProfilePicture: (newImageUrl: string) => void;
   isPasswordChangeForced: boolean;
+  items: Item[];
+  onGlobalSearch: (searchTerm: string) => void;
 }
 
 const NavLink: React.FC<{
@@ -36,11 +39,15 @@ const NavLink: React.FC<{
   </li>
 );
 
-const Layout: React.FC<LayoutProps> = ({ children, user, onLogout, activePage, setActivePage, onUpdateProfilePicture, isPasswordChangeForced }) => {
+const Layout: React.FC<LayoutProps> = ({ children, user, onLogout, activePage, setActivePage, onUpdateProfilePicture, isPasswordChangeForced, items, onGlobalSearch }) => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  const [globalSearchTerm, setGlobalSearchTerm] = useState('');
+  const [searchResults, setSearchResults] = useState<Item[]>([]);
+  const searchRef = useRef<HTMLDivElement>(null);
 
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: <DashboardIcon />, role: ['Admin', 'Operator'] },
@@ -97,6 +104,37 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogout, activePage, s
     const title = pageTitles[activePage] || 'Dashboard';
     document.title = `${title} | Alumasa Controle do Almoxarifado`;
   }, [activePage]);
+  
+  // Global search logic
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (searchRef.current && !searchRef.current.contains(event.target as Node)) {
+        setSearchResults([]);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const term = e.target.value;
+    setGlobalSearchTerm(term);
+    if (term.trim() === '') {
+      setSearchResults([]);
+      return;
+    }
+    const filtered = items.filter(item =>
+      item.code.toLowerCase().includes(term.toLowerCase()) ||
+      item.description.toLowerCase().includes(term.toLowerCase())
+    ).slice(0, 7); // Show top 7 results
+    setSearchResults(filtered);
+  };
+
+  const handleResultClick = (item: Item) => {
+    onGlobalSearch(item.code);
+    setGlobalSearchTerm('');
+    setSearchResults([]);
+  };
 
   const sidebarContent = (
     <>
@@ -147,14 +185,46 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogout, activePage, s
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        <header className="flex items-center justify-between p-4 bg-white border-b border-gray-200 shadow-sm">
-          <button className="text-gray-600 md:hidden" onClick={() => setSidebarOpen(!sidebarOpen)}>
-            {sidebarOpen ? <CloseIcon /> : <MenuIcon />}
-          </button>
-          <div className="flex-1">
-             <h2 className="text-xl font-semibold text-gray-700">{pageTitles[activePage] || 'Dashboard'}</h2>
-          </div>
+        <header className="flex items-center justify-between p-4 bg-white border-b border-gray-200 shadow-sm gap-4">
           <div className="flex items-center">
+            <button className="text-gray-600 md:hidden mr-4" onClick={() => setSidebarOpen(!sidebarOpen)}>
+              {sidebarOpen ? <CloseIcon /> : <MenuIcon />}
+            </button>
+            <h2 className="text-xl font-semibold text-gray-700 hidden sm:block">{pageTitles[activePage] || 'Dashboard'}</h2>
+          </div>
+
+          <div className="flex-1 flex justify-center px-2" ref={searchRef}>
+            <div className="relative w-full max-w-lg">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <SearchIcon className="text-gray-400" />
+              </div>
+              <Input
+                type="search"
+                placeholder="Buscar item por código ou descrição..."
+                className="pl-10"
+                value={globalSearchTerm}
+                onChange={handleSearchChange}
+                disabled={isPasswordChangeForced}
+              />
+              {searchResults.length > 0 && (
+                <ul className="absolute z-20 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-80 overflow-y-auto">
+                  {searchResults.map(item => (
+                    <li
+                      key={item.id}
+                      className="px-4 py-2 cursor-pointer hover:bg-gray-100"
+                      onClick={() => handleResultClick(item)}
+                    >
+                      <p className="font-semibold text-gray-800">{item.code}</p>
+                      <p className="text-sm text-gray-600">{item.description}</p>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+          
+          <div className="flex items-center">
+            <span className="text-gray-600 mr-3 hidden lg:inline">Bem-vindo, {user.name}</span>
             <button 
               onClick={() => setIsProfileModalOpen(true)}
               className="focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 rounded-full disabled:opacity-50 disabled:cursor-not-allowed"
@@ -167,7 +237,6 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogout, activePage, s
                 alt="User avatar"
               />
             </button>
-            <span className="text-gray-600 ml-3">Bem-vindo, {user.name}</span>
           </div>
         </header>
         <main className="flex-1 overflow-x-hidden overflow-y-auto bg-gray-100 p-4 md:p-6 lg:p-8">

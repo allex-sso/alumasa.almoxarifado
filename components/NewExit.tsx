@@ -21,6 +21,7 @@ const NewExit: React.FC<NewExitProps> = ({ items, setItems, itemForExit, clearIt
     const [isLoading, setIsLoading] = useState(false);
     const [status, setStatus] = useState<{type: 'success' | 'error', text: string} | null>(null);
     const [searchTerm, setSearchTerm] = useState(itemForExit ? `${itemForExit.code} - ${itemForExit.description}` : '');
+    const [itemError, setItemError] = useState<string | null>(null);
     const [showResults, setShowResults] = useState(false);
     const [activeIndex, setActiveIndex] = useState(-1);
     const resultsContainerRef = useRef<HTMLUListElement>(null);
@@ -44,7 +45,6 @@ const NewExit: React.FC<NewExitProps> = ({ items, setItems, itemForExit, clearIt
         }
     }, [itemForExit, clearItemForExit]);
 
-
     useEffect(() => {
         if (activeIndex >= 0 && resultsContainerRef.current) {
             const activeItem = resultsContainerRef.current.children[activeIndex] as HTMLLIElement;
@@ -57,6 +57,7 @@ const NewExit: React.FC<NewExitProps> = ({ items, setItems, itemForExit, clearIt
     const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         setSearchTerm(e.target.value);
         setItemId(''); // Clear selection when user edits search
+        setItemError(null); // Clear error when user types
         setShowResults(true);
         setActiveIndex(-1);
     };
@@ -66,6 +67,22 @@ const NewExit: React.FC<NewExitProps> = ({ items, setItems, itemForExit, clearIt
         setSearchTerm(`${item.code} - ${item.description}`);
         setShowResults(false);
         setActiveIndex(-1);
+        setItemError(null); // Clear error on successful selection
+    };
+
+    const handleSearchBlur = () => {
+      setTimeout(() => {
+        setShowResults(false);
+        // Only run validation if no item is selected yet and the search term isn't empty
+        if (!itemId && searchTerm.trim()) {
+          const exactMatch = items.find(i => i.code.toLowerCase() === searchTerm.trim().toLowerCase());
+          if (exactMatch) {
+            handleItemSelect(exactMatch);
+          } else {
+            setItemError('Item inválido. Por favor, selecione um item da lista de busca.');
+          }
+        }
+      }, 200); // 200ms delay to allow click on search results
     };
 
     const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -80,7 +97,7 @@ const NewExit: React.FC<NewExitProps> = ({ items, setItems, itemForExit, clearIt
                 e.preventDefault();
                 if (activeIndex >= 0) {
                     handleItemSelect(searchResults[activeIndex]);
-                } else {
+                } else { // try an exact match on enter if nothing is highlighted
                     const exactMatch = items.find(item => item.code.toLowerCase() === searchTerm.toLowerCase().trim());
                     if (exactMatch) handleItemSelect(exactMatch);
                 }
@@ -88,18 +105,17 @@ const NewExit: React.FC<NewExitProps> = ({ items, setItems, itemForExit, clearIt
                 setShowResults(false);
                 setActiveIndex(-1);
             }
-        } else if (e.key === 'Enter') {
+        } else if (e.key === 'Enter') { // Handle enter when list is not shown
             const exactMatch = items.find(item => item.code.toLowerCase() === searchTerm.toLowerCase().trim());
             if (exactMatch) {
                 e.preventDefault();
                 handleItemSelect(exactMatch);
-            } else if (searchResults.length === 1) {
+            } else if (searchResults.length === 1) { // Auto-select if there's only one result
                 e.preventDefault();
                 handleItemSelect(searchResults[0]);
             }
         }
     };
-
 
     const exitDate = new Date().toLocaleDateString('pt-BR');
 
@@ -124,16 +140,9 @@ const NewExit: React.FC<NewExitProps> = ({ items, setItems, itemForExit, clearIt
 
         setIsLoading(true);
         setStatus(null);
+        setItemError(null);
 
         // Simulate API call
-        console.log({
-            exitDate,
-            itemId,
-            quantity: qty,
-            requester,
-            responsible,
-        });
-
         await new Promise(resolve => setTimeout(resolve, 1500));
 
         setItems(prevItems => prevItems.map(item => {
@@ -148,7 +157,6 @@ const NewExit: React.FC<NewExitProps> = ({ items, setItems, itemForExit, clearIt
             return item;
         }));
 
-
         setIsLoading(false);
         setStatus({type: 'success', text: 'Saída registrada com sucesso!'});
         
@@ -159,6 +167,8 @@ const NewExit: React.FC<NewExitProps> = ({ items, setItems, itemForExit, clearIt
         setItemId('');
         setSearchTerm('');
     };
+
+    const isSubmitDisabled = isLoading || !itemId || !!itemError;
 
     return (
         <div className="space-y-6 max-w-4xl mx-auto">
@@ -186,7 +196,7 @@ const NewExit: React.FC<NewExitProps> = ({ items, setItems, itemForExit, clearIt
                                 onChange={handleSearchChange}
                                 onKeyDown={handleKeyDown}
                                 onFocus={() => setShowResults(true)}
-                                onBlur={() => setTimeout(() => setShowResults(false), 200)}
+                                onBlur={handleSearchBlur}
                                 placeholder="Digite o código ou descrição para buscar..."
                                 autoComplete="off"
                                 required={!itemId}
@@ -194,7 +204,7 @@ const NewExit: React.FC<NewExitProps> = ({ items, setItems, itemForExit, clearIt
                                 aria-controls="search-results-list"
                                 aria-activedescendant={activeIndex >= 0 ? `search-result-${activeIndex}` : undefined}
                                 readOnly={isPreFilled}
-                                className={isPreFilled ? 'bg-gray-100 cursor-not-allowed' : ''}
+                                className={`${isPreFilled ? 'bg-gray-100 cursor-not-allowed' : ''} ${itemError ? 'border-red-500' : ''}`}
                             />
                             {showResults && !isPreFilled && searchResults.length > 0 && (
                                 <ul
@@ -218,12 +228,7 @@ const NewExit: React.FC<NewExitProps> = ({ items, setItems, itemForExit, clearIt
                                     ))}
                                 </ul>
                             )}
-                            {showResults && searchTerm.trim().length > 0 && searchResults.length === 0 && !itemId && !isPreFilled && (
-                                <div className="absolute z-10 w-full mt-1 p-4 bg-gray-50 border border-gray-300 rounded-md shadow-lg text-center">
-                                    <p className="text-sm font-semibold text-gray-700">Nenhum item encontrado</p>
-                                    <p className="text-xs text-gray-500 mt-1">Verifique o código ou a descrição e tente novamente.</p>
-                                </div>
-                            )}
+                             {itemError && <p className="text-sm text-red-600 mt-1">{itemError}</p>}
                             {selectedItem && (
                                 <div className="mt-2 text-sm text-gray-600">
                                     Estoque atual: <span className={`font-bold ${selectedItem.stockQuantity <= selectedItem.minQuantity ? 'text-red-600' : 'text-green-600'}`}>{selectedItem.stockQuantity.toLocaleString('pt-BR')}</span>
@@ -254,7 +259,7 @@ const NewExit: React.FC<NewExitProps> = ({ items, setItems, itemForExit, clearIt
                     )}
 
                     <div className="flex justify-end pt-4">
-                        <Button type="submit" disabled={isLoading || !itemId}>
+                        <Button type="submit" disabled={isSubmitDisabled}>
                             {isLoading ? 'Registrando...' : 'Registrar Saída'}
                         </Button>
                     </div>

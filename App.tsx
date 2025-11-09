@@ -22,6 +22,7 @@ const App: React.FC = () => {
   const [items, setItems] = useState<Item[]>(mockItems);
   const [entryExitHistory, setEntryExitHistory] = useState<EntryExitRecord[]>(mockEntryExitHistory);
   const [changePasswordUser, setChangePasswordUser] = useState<User | null>(null);
+  const [initialStockSearch, setInitialStockSearch] = useState<string>('');
 
 
   const handleLogout = () => {
@@ -69,6 +70,11 @@ const App: React.FC = () => {
   const onRequestChangePasswordForUser = (user: User) => {
     setChangePasswordUser(user);
   };
+  
+  const handleGlobalSearch = (term: string) => {
+    setInitialStockSearch(term);
+    setCurrentPage('stock');
+  };
 
 
   const renderPage = useCallback(() => {
@@ -76,9 +82,18 @@ const App: React.FC = () => {
 
     switch (currentPage) {
       case 'dashboard':
-        return <Dashboard items={items} history={entryExitHistory} />;
+        return <Dashboard items={items} history={entryExitHistory} setCurrentPage={setCurrentPage} />;
       case 'stock':
-        return <StockList items={items} setItems={setItems} setActivePage={setCurrentPage} setItemForEntry={setItemForEntry} setItemForExit={setItemForExit} history={entryExitHistory} />;
+        return <StockList 
+                    items={items} 
+                    setItems={setItems} 
+                    setActivePage={setCurrentPage} 
+                    setItemForEntry={setItemForEntry} 
+                    setItemForExit={setItemForExit} 
+                    history={entryExitHistory} 
+                    initialSearchTerm={initialStockSearch}
+                    clearInitialSearch={() => setInitialStockSearch('')}
+                />;
       case 'new-entry':
         return <NewEntry items={items} setItems={setItems} itemForEntry={itemForEntry} clearItemForEntry={() => setItemForEntry(null)} />;
       case 'new-exit':
@@ -103,9 +118,9 @@ const App: React.FC = () => {
                     setHistory={setEntryExitHistory}
                   />;
       default:
-        return <Dashboard items={items} history={entryExitHistory} />;
+        return <Dashboard items={items} history={entryExitHistory} setCurrentPage={setCurrentPage} />;
     }
-  }, [currentPage, itemForEntry, itemForExit, authenticatedUser, users, items, entryExitHistory]);
+  }, [currentPage, itemForEntry, itemForExit, authenticatedUser, users, items, entryExitHistory, initialStockSearch]);
 
   if (!authenticatedUser && !changePasswordUser) {
     return <Login onLogin={handleLogin} users={users} />;
@@ -131,6 +146,8 @@ const App: React.FC = () => {
         setActivePage={setCurrentPage}
         onUpdateProfilePicture={handleUpdateProfilePicture}
         isPasswordChangeForced={!!changePasswordUser && changePasswordUser.password === 'changeme'}
+        items={items}
+        onGlobalSearch={handleGlobalSearch}
       >
         {renderPage()}
       </Layout>

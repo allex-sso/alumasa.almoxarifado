@@ -15,9 +15,11 @@ interface StockListProps {
     setItemForEntry: (item: Item) => void;
     setItemForExit: (item: Item) => void;
     history: EntryExitRecord[];
+    initialSearchTerm?: string;
+    clearInitialSearch?: () => void;
 }
 
-const StockList: React.FC<StockListProps> = ({ items, setItems, setActivePage, setItemForEntry, setItemForExit, history }) => {
+const StockList: React.FC<StockListProps> = ({ items, setItems, setActivePage, setItemForEntry, setItemForExit, history, initialSearchTerm, clearInitialSearch }) => {
     const [filterCategory, setFilterCategory] = useState('');
     const [filterStatus, setFilterStatus] = useState('');
     const [filterLocation, setFilterLocation] = useState('');
@@ -38,6 +40,13 @@ const StockList: React.FC<StockListProps> = ({ items, setItems, setActivePage, s
     
     // Generic toast state
     const [toast, setToast] = useState<{ message: string; type: 'success' | 'warning' } | null>(null);
+
+    useEffect(() => {
+        if (initialSearchTerm && clearInitialSearch) {
+            setSearchTerm(initialSearchTerm);
+            clearInitialSearch();
+        }
+    }, [initialSearchTerm, clearInitialSearch]);
 
     useEffect(() => {
         if (qrCodeRef.current && qrCodeItem && typeof (window as any).QRCode !== 'undefined') {
@@ -410,10 +419,11 @@ const StockList: React.FC<StockListProps> = ({ items, setItems, setActivePage, s
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
                             {paginatedItems.length > 0 ? (
-                                paginatedItems.map((item) => {
+                                paginatedItems.map((item, index) => {
                                     const isLowStock = item.stockQuantity <= item.minQuantity;
+                                    const rowClass = isLowStock ? 'bg-red-50' : index % 2 === 0 ? 'bg-white' : 'bg-gray-50';
                                     return (
-                                        <tr key={item.id} className={isLowStock ? 'bg-red-50' : ''}>
+                                        <tr key={item.id} className={rowClass}>
                                              <td className="px-6 py-4 whitespace-nowrap">
                                                 <input 
                                                     type="checkbox"
@@ -425,10 +435,8 @@ const StockList: React.FC<StockListProps> = ({ items, setItems, setActivePage, s
                                             </td>
                                             <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                                                 <div className="flex items-center gap-2">
-                                                    {isLowStock ? (
+                                                    {isLowStock && (
                                                         <span className="h-2 w-2 bg-red-500 rounded-full flex-shrink-0" title="Estoque baixo"></span>
-                                                    ) : (
-                                                        <span className="h-2 w-2 flex-shrink-0"></span>
                                                     )}
                                                     <span>{item.code}</span>
                                                 </div>

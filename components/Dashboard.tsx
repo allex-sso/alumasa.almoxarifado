@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, Sector } from 'recharts';
 import Card from './ui/Card';
 import { StockIcon, EntryIcon, ReportsIcon, ExitIcon } from './icons/Icons';
-import { Item, EntryExitRecord } from '../types';
+import { Item, EntryExitRecord, Page } from '../types';
 import Select from './ui/Select';
 import Input from './ui/Input';
 
@@ -30,9 +30,10 @@ const getToday = () => {
 interface DashboardProps {
     items: Item[];
     history: EntryExitRecord[];
+    setCurrentPage: (page: Page) => void;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ items, history }) => {
+const Dashboard: React.FC<DashboardProps> = ({ items, history, setCurrentPage }) => {
     const [startDate, setStartDate] = useState(getStartOfMonth());
     const [endDate, setEndDate] = useState(getToday());
     const [filterCategory, setFilterCategory] = useState('');
@@ -96,51 +97,61 @@ const Dashboard: React.FC<DashboardProps> = ({ items, history }) => {
             
             {/* Stat Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6">
-                 <Card className="bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow-lg">
-                    <div className="flex items-center p-4">
-                        <div className="p-3 bg-black bg-opacity-20 rounded-full"><StockIcon /></div>
-                        <div className="ml-4">
-                            <p className="text-sm font-medium text-gray-200">Valor Total em Estoque</p>
-                            <p className="text-2xl font-bold">R$ {filteredDashboardData.totalValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                 <div className="cursor-pointer transition-transform transform hover:scale-105" onClick={() => setCurrentPage('stock')}>
+                    <Card className="bg-gradient-to-br from-sky-500 to-sky-600 text-white shadow-lg h-full">
+                        <div className="flex items-center p-4">
+                            <div className="p-3 bg-black bg-opacity-20 rounded-full"><StockIcon /></div>
+                            <div className="ml-4">
+                                <p className="text-sm font-medium text-gray-200">Valor Total em Estoque</p>
+                                <p className="text-2xl font-bold">R$ {filteredDashboardData.totalValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                            </div>
                         </div>
-                    </div>
-                </Card>
-                <Card className="bg-gradient-to-br from-purple-500 to-violet-600 text-white shadow-lg">
-                    <div className="flex items-center p-4">
-                        <div className="p-3 bg-black bg-opacity-20 rounded-full"><StockIcon /></div>
-                        <div className="ml-4">
-                            <p className="text-sm font-medium text-gray-200">Quantidade Total de Itens</p>
-                            <p className="text-2xl font-bold">{filteredDashboardData.totalItems.toLocaleString('pt-BR')}</p>
+                    </Card>
+                </div>
+                 <div className="cursor-pointer transition-transform transform hover:scale-105" onClick={() => setCurrentPage('stock')}>
+                    <Card className="bg-gradient-to-br from-slate-500 to-slate-600 text-white shadow-lg h-full">
+                        <div className="flex items-center p-4">
+                            <div className="p-3 bg-black bg-opacity-20 rounded-full"><StockIcon /></div>
+                            <div className="ml-4">
+                                <p className="text-sm font-medium text-gray-200">Quantidade Total</p>
+                                <p className="text-2xl font-bold">{filteredDashboardData.totalItems.toLocaleString('pt-BR')}</p>
+                            </div>
                         </div>
-                    </div>
-                </Card>
-                <Card className="bg-gradient-to-br from-red-500 to-pink-600 text-white shadow-lg">
-                    <div className="flex items-center p-4">
-                        <div className="p-3 bg-black bg-opacity-20 rounded-full"><ReportsIcon /></div>
-                        <div className="ml-4">
-                            <p className="text-sm font-medium text-gray-200">Itens Abaixo do Mínimo</p>
-                            <p className="text-2xl font-bold">{filteredDashboardData.lowStockCount}</p>
+                    </Card>
+                </div>
+                 <div className="cursor-pointer transition-transform transform hover:scale-105" onClick={() => setCurrentPage('stock')}>
+                    <Card className="bg-gradient-to-br from-amber-500 to-amber-600 text-white shadow-lg h-full">
+                        <div className="flex items-center p-4">
+                            <div className="p-3 bg-black bg-opacity-20 rounded-full"><ReportsIcon /></div>
+                            <div className="ml-4">
+                                <p className="text-sm font-medium text-gray-200">Itens Abaixo do Mínimo</p>
+                                <p className="text-2xl font-bold">{filteredDashboardData.lowStockCount}</p>
+                            </div>
                         </div>
-                    </div>
-                </Card>
-                <Card className="bg-gradient-to-br from-green-500 to-teal-600 text-white shadow-lg">
-                    <div className="flex items-center p-4">
-                        <div className="p-3 bg-black bg-opacity-20 rounded-full"><EntryIcon /></div>
-                        <div className="ml-4">
-                            <p className="text-sm font-medium text-gray-200">Entradas no Período</p>
-                            <p className="text-2xl font-bold">{filteredDashboardData.entries.toLocaleString('pt-BR')}</p>
+                    </Card>
+                </div>
+                 <div className="cursor-pointer transition-transform transform hover:scale-105" onClick={() => setCurrentPage('reports')}>
+                    <Card className="bg-gradient-to-br from-emerald-500 to-emerald-600 text-white shadow-lg h-full">
+                        <div className="flex items-center p-4">
+                            <div className="p-3 bg-black bg-opacity-20 rounded-full"><EntryIcon /></div>
+                            <div className="ml-4">
+                                <p className="text-sm font-medium text-gray-200">Entradas no Período</p>
+                                <p className="text-2xl font-bold">{filteredDashboardData.entries.toLocaleString('pt-BR')}</p>
+                            </div>
                         </div>
-                    </div>
-                </Card>
-                 <Card className="bg-gradient-to-br from-yellow-500 to-orange-600 text-white shadow-lg">
-                    <div className="flex items-center p-4">
-                        <div className="p-3 bg-black bg-opacity-20 rounded-full"><ExitIcon /></div>
-                        <div className="ml-4">
-                            <p className="text-sm font-medium text-gray-200">Saídas no Período</p>
-                            <p className="text-2xl font-bold">{filteredDashboardData.exits.toLocaleString('pt-BR')}</p>
+                    </Card>
+                </div>
+                 <div className="cursor-pointer transition-transform transform hover:scale-105" onClick={() => setCurrentPage('reports')}>
+                    <Card className="bg-gradient-to-br from-orange-500 to-orange-600 text-white shadow-lg h-full">
+                        <div className="flex items-center p-4">
+                            <div className="p-3 bg-black bg-opacity-20 rounded-full"><ExitIcon /></div>
+                            <div className="ml-4">
+                                <p className="text-sm font-medium text-gray-200">Saídas no Período</p>
+                                <p className="text-2xl font-bold">{filteredDashboardData.exits.toLocaleString('pt-BR')}</p>
+                            </div>
                         </div>
-                    </div>
-                </Card>
+                    </Card>
+                </div>
             </div>
 
             {/* Charts */}
