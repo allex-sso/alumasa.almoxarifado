@@ -175,13 +175,13 @@ const Dashboard: React.FC<DashboardProps> = ({ items, history, setCurrentPage })
                     <h3 className="text-xl font-semibold text-gray-700 p-4">Itens por Categoria</h3>
                     <div style={{ width: '100%', height: 400 }}>
                         <ResponsiveContainer>
-                            <PieChart margin={{ top: 5, right: 30, bottom: 5, left: 30 }}>
+                            <PieChart margin={{ top: 20, right: 40, bottom: 20, left: 40 }}>
                                 <Pie
                                     data={filteredDashboardData.categoryChartData}
                                     cx="50%"
                                     cy="50%"
                                     labelLine={false}
-                                    outerRadius={100}
+                                    outerRadius={80}
                                     fill="#8884d8"
                                     dataKey="value"
                                     nameKey="name"
