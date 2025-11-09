@@ -2,11 +2,10 @@ import React, { useState, useMemo, useRef } from 'react';
 import Card from './ui/Card';
 import Button from './ui/Button';
 import { Item, EntryExitRecord } from '../types';
-import { PrintIcon, ExportIcon, WarningIcon, StockIcon, HistoryIcon, PdfIcon } from './icons/Icons';
+import { PrintIcon, ExportIcon, WarningIcon, StockIcon, HistoryIcon } from './icons/Icons';
 import Input from './ui/Input';
 import Select from './ui/Select';
-
-declare const jsPDF: any;
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 const getStartOfMonth = () => {
     const now = new Date();
@@ -59,7 +58,8 @@ const Reports: React.FC<ReportsProps> = ({ items, history }) => {
     const lowStockItems = filteredItems.filter(item => item.stockQuantity <= item.minQuantity);
     const movementHistory = filteredHistory.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     const valueByLocation = filteredItems.reduce((acc, item) => {
-        acc[item.location] = (acc[item.location] || 0) + item.totalValue;
+        // FIX: Explicitly cast item.totalValue to a number to prevent string concatenation issues.
+        acc[item.location] = (acc[item.location] || 0) + Number(item.totalValue);
         return acc;
     }, {} as Record<string, number>);
 
@@ -83,7 +83,12 @@ const Reports: React.FC<ReportsProps> = ({ items, history }) => {
                         th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
                         th { background-color: #f2f2f2; }
                         .no-print { display: none; }
-                        @media print { body { margin: 1cm; } }
+                        @media print { 
+                            body { margin: 1cm; }
+                             .chart-container {
+                                page-break-inside: avoid;
+                            }
+                         }
                     </style>
                 </head>
                 <body>${printArea.innerHTML}</body>
@@ -154,73 +159,6 @@ const Reports: React.FC<ReportsProps> = ({ items, history }) => {
     link.click();
     document.body.removeChild(link);
   };
-
-  const handleExportPdf = () => {
-    if (typeof jsPDF === 'undefined') {
-        alert('A biblioteca de PDF não pôde ser carregada. Tente recarregar a página.');
-        return;
-    }
-
-    const doc = new jsPDF();
-    const reportTitle = TABS.find(t => t.id === activeTab)?.label || 'Relatório';
-    const todayStr = new Date().toLocaleDateString('pt-BR');
-
-    doc.setFontSize(18);
-    doc.text(reportTitle, 14, 22);
-    doc.setFontSize(11);
-    doc.setTextColor(100);
-    doc.text(`Data de Geração: ${todayStr}`, 14, 30);
-    let filterText = `Período: ${new Date(startDate).toLocaleDateString('pt-BR')} a ${new Date(endDate).toLocaleDateString('pt-BR')}`;
-    if (filterCategory) {
-        filterText += ` | Categoria: ${filterCategory}`;
-    }
-    doc.text(filterText, 14, 35);
-
-    let head: string[][] = [];
-    let body: (string|number)[][] = [];
-    const filename = `relatorio_${activeTab}_${getToday()}.pdf`;
-
-    switch(activeTab) {
-        case 'lowStock':
-            head.push(['Código', 'Descrição', 'Qtd. Atual', 'Qtd. Mínima', 'Categoria', 'Localização']);
-            body = filteredReportData.lowStockItems.map(item => [
-                item.code, item.description, item.stockQuantity, item.minQuantity, item.category, item.location
-            ]);
-            break;
-        case 'movement':
-            head.push(['Data', 'Cód. Item', 'Descrição', 'Tipo', 'Quantidade']);
-            body = filteredReportData.movementHistory.map(record => {
-                const item = items.find(i => i.id === record.itemId);
-                return [
-                    new Date(record.date).toLocaleDateString('pt-BR'),
-                    item?.code || 'N/A',
-                    item?.description || 'N/A',
-                    record.type === 'entry' ? 'Entrada' : 'Saída',
-                    record.quantity
-                ];
-            });
-            break;
-        case 'locationValue':
-            head.push(['Localização', 'Valor Total']);
-            body = Object.entries(filteredReportData.valueByLocation).map(([location, value]) => [
-                location,
-                new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(value))
-            ]);
-            break;
-    }
-
-    if (head.length === 0) return;
-
-    doc.autoTable({
-        startY: 40,
-        head: head,
-        body: body,
-        theme: 'striped',
-        headStyles: { fillColor: [0, 35, 71] }, // Alumasa blue color
-    });
-
-    doc.save(filename);
-  };
   
   const renderReportContent = () => {
     const reportTitle = TABS.find(t => t.id === activeTab)?.label || 'Relatório';
@@ -274,6 +212,8 @@ const Reports: React.FC<ReportsProps> = ({ items, history }) => {
                     <tr>
                       <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Data</th>
                       <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Cód. Item</th>
+                      {/* FIX: Add missing Description column to match exports */}
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Descrição</th>
                       <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Tipo</th>
                       <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Quantidade</th>
                     </tr>
@@ -285,6 +225,8 @@ const Reports: React.FC<ReportsProps> = ({ items, history }) => {
                         <tr key={record.id}>
                           <td className="px-4 py-2 whitespace-nowrap text-sm">{new Date(record.date).toLocaleDateString('pt-BR')}</td>
                           <td className="px-4 py-2 whitespace-nowrap text-sm">{item?.code || 'N/A'}</td>
+                          {/* FIX: Add missing Description data cell to match exports */}
+                          <td className="px-4 py-2 whitespace-nowrap text-sm">{item?.description || 'N/A'}</td>
                           <td className="px-4 py-2 whitespace-nowrap text-sm">
                             <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${record.type === 'entry' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
                               {record.type === 'entry' ? 'Entrada' : 'Saída'}
@@ -301,6 +243,10 @@ const Reports: React.FC<ReportsProps> = ({ items, history }) => {
         }
         case 'locationValue': {
             const { valueByLocation } = filteredReportData;
+            const chartData = Object.entries(valueByLocation)
+                .map(([name, value]) => ({ name, value }))
+                .sort((a, b) => b.value - a.value);
+
             return (
               <div ref={reportPrintRef}>
                 {reportHeader}
@@ -322,6 +268,27 @@ const Reports: React.FC<ReportsProps> = ({ items, history }) => {
                     ))}
                   </tbody>
                 </table>
+
+                <div className="mt-8 chart-container">
+                    <h3 className="text-xl font-semibold text-gray-700 mb-4">Gráfico de Valor por Localização</h3>
+                    <div style={{ width: '100%', height: 400 }}>
+                        <ResponsiveContainer>
+                            <BarChart
+                                data={chartData}
+                                layout="vertical"
+                                margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                            >
+                                <CartesianGrid strokeDasharray="3 3" />
+                                <XAxis type="number" tickFormatter={(value) => `R$ ${new Intl.NumberFormat('pt-BR').format(value)}`} />
+                                <YAxis type="category" dataKey="name" width={80} />
+                                <Tooltip formatter={(value: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value)} />
+                                <Legend />
+                                <Bar dataKey="value" name="Valor em Estoque" fill="#002347" />
+                            </BarChart>
+                        </ResponsiveContainer>
+                    </div>
+                </div>
+
               </div>
             );
         }
@@ -375,10 +342,6 @@ const Reports: React.FC<ReportsProps> = ({ items, history }) => {
         </div>
         <div className="p-4 md:p-6">
             <div className="flex justify-end flex-wrap gap-4 mb-4">
-                <Button onClick={handleExportPdf} className="bg-red-600 hover:bg-red-700">
-                    <PdfIcon />
-                    Exportar para PDF
-                </Button>
                 <Button onClick={handleExportCsv} className="bg-green-600 hover:bg-green-700">
                     <ExportIcon />
                     Exportar para CSV
