@@ -17,9 +17,10 @@ interface StockListProps {
     history: EntryExitRecord[];
     initialSearchTerm?: string;
     clearInitialSearch?: () => void;
+    addAuditLog: (action: string) => void;
 }
 
-const StockList: React.FC<StockListProps> = ({ items, setItems, setActivePage, setItemForEntry, setItemForExit, history, initialSearchTerm, clearInitialSearch }) => {
+const StockList: React.FC<StockListProps> = ({ items, setItems, setActivePage, setItemForEntry, setItemForExit, history, initialSearchTerm, clearInitialSearch, addAuditLog }) => {
     const [filterCategory, setFilterCategory] = useState('');
     const [filterStatus, setFilterStatus] = useState('');
     const [filterLocation, setFilterLocation] = useState('');
@@ -30,9 +31,12 @@ const StockList: React.FC<StockListProps> = ({ items, setItems, setActivePage, s
     const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [itemToEdit, setItemToEdit] = useState<Partial<Item> | null>(null);
-    const [qrCodeItem, setQrCodeItem] = useState<Item | null>(null);
+    const [previewItem, setPreviewItem] = useState<Item | null>(null);
     const [selectedItems, setSelectedItems] = useState<string[]>([]);
-    const qrCodeRef = useRef<HTMLDivElement>(null);
+    
+    const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+    const [isPreviewLoading, setIsPreviewLoading] = useState(false);
+    const [previewError, setPreviewError] = useState(false);
     
     // Pagination state
     const [currentPage, setCurrentPage] = useState(1);
@@ -48,16 +52,55 @@ const StockList: React.FC<StockListProps> = ({ items, setItems, setActivePage, s
         }
     }, [initialSearchTerm, clearInitialSearch]);
 
+    const generateZplForItem = (item: Item): string => {
+        const sanitize = (text: string, maxLength: number) => {
+            if (!text) return '';
+            // First, remove accents
+            const withoutAccents = text.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+            // Then, remove characters that could break ZPL syntax or URLs
+            return withoutAccents.replace(/[\^~&"'\n\r]/g, ' ').substring(0, maxLength);
+        };
+
+        const sanitizedCode = sanitize(item.code, 20);
+        const sanitizedDescription = sanitize(item.description, 40);
+
+        const zplCommands = [
+            '^XA',
+            '^CI28', // UTF-8 Character set
+            `^FO40,50^BQN,2,6^FDQA,${sanitizedCode}^FS`,
+            // Adjusted font size and position for better fit
+            `^FO250,60^A0N,60,60^FD${sanitizedCode}^FS`,
+            `^FO250,150^A0N,25,25^FB500,2,0,L,0^FD${sanitizedDescription}&^FS`,
+            '^XZ'
+        ];
+        
+        return zplCommands.join('');
+    };
+
+    // Effect to generate label preview URL when an item is selected
     useEffect(() => {
-        if (qrCodeRef.current && qrCodeItem && typeof (window as any).QRCode !== 'undefined') {
-            qrCodeRef.current.innerHTML = '';
-            new (window as any).QRCode(qrCodeRef.current, {
-                text: qrCodeItem.code,
-                width: 200,
-                height: 200,
-            });
+        if (previewItem) {
+            setIsPreviewLoading(true);
+            setPreviewError(false);
+            setPreviewUrl(null);
+            
+            try {
+                const zpl = generateZplForItem(previewItem);
+                const encodedZpl = encodeURIComponent(zpl);
+                const url = `https://api.labelary.com/v1/printers/8dpmm/labels/4x2.5/0/?zpl=${encodedZpl}`;
+                setPreviewUrl(url);
+            } catch (error) {
+                console.error("Failed to generate label URL:", error);
+                setToast({ message: 'Erro ao criar o link da etiqueta.', type: 'warning' });
+                setIsPreviewLoading(false);
+                setPreviewError(true);
+            }
+        } else {
+            setPreviewUrl(null);
+            setIsPreviewLoading(false);
+            setPreviewError(false);
         }
-    }, [qrCodeItem]);
+    }, [previewItem]);
 
 
     const filteredItems = useMemo(() => {
@@ -124,6 +167,7 @@ const StockList: React.FC<StockListProps> = ({ items, setItems, setActivePage, s
     const confirmDeleteItem = () => {
         if (itemToDelete) {
             setItems(prev => prev.filter(item => item.id !== itemToDelete.id));
+            addAuditLog(`Excluiu o item ${itemToDelete.code} - ${itemToDelete.description}.`);
             setToast({ message: 'Item excluído com sucesso!', type: 'success' });
         }
         closeDeleteConfirmation();
@@ -184,24 +228,67 @@ const StockList: React.FC<StockListProps> = ({ items, setItems, setActivePage, s
     };
 
     const handleSaveItem = () => {
-        if (itemToEdit) {
-            if (itemToEdit.id) { // Editing
-                const updatedItem = {
-                    ...itemToEdit,
-                    totalValue: (itemToEdit.stockQuantity || 0) * (itemToEdit.avgUnitValue || 0)
-                } as Item;
-                setItems(prevItems => prevItems.map(item => item.id === updatedItem.id ? updatedItem : item));
-                setToast({ message: 'Item salvo com sucesso!', type: 'success' });
-            } else { // Creating
-                 const newItem: Item = {
-                    ...itemToEdit,
-                    id: `item-${Date.now()}`, // Simple unique ID
-                    totalValue: (itemToEdit.stockQuantity || 0) * (itemToEdit.avgUnitValue || 0)
-                } as Item;
-                setItems(prevItems => [...prevItems, newItem]);
-                setToast({ message: 'Item criado com sucesso!', type: 'success' });
+        if (!itemToEdit) return;
+
+        // --- VALIDATION FOR NEW ITEM ---
+        if (!itemToEdit.id) {
+            const { code, description, category, location, unit, stockQuantity } = itemToEdit;
+
+            const requiredFields: { key: keyof Item, name: string }[] = [
+                { key: 'code', name: 'Código' },
+                { key: 'description', name: 'Descrição' },
+                { key: 'category', name: 'Categoria' },
+                { key: 'location', name: 'Localização' },
+                { key: 'unit', name: 'Unidade de Medida' }
+            ];
+
+            for (const field of requiredFields) {
+                if (!itemToEdit[field.key] || String(itemToEdit[field.key]).trim() === '') {
+                    setToast({ message: `O campo "${field.name}" é obrigatório.`, type: 'warning' });
+                    return;
+                }
+            }
+
+            if (stockQuantity === null || stockQuantity === undefined) {
+                setToast({ message: 'O campo "Quantidade Inicial" é obrigatório.', type: 'warning' });
+                return;
+            }
+
+            const codeExists = items.some(
+                item => item.code.trim().toLowerCase() === code?.trim().toLowerCase()
+            );
+
+            if (codeExists) {
+                setToast({ message: `Erro: O código "${code}" já está cadastrado.`, type: 'warning' });
+                return;
             }
         }
+        // --- END VALIDATION ---
+
+        if (itemToEdit.id) { // Editing
+            const updatedItem = {
+                ...itemToEdit,
+                totalValue: (itemToEdit.stockQuantity || 0) * (itemToEdit.avgUnitValue || 0)
+            } as Item;
+            setItems(prevItems => prevItems.map(item => item.id === updatedItem.id ? updatedItem : item));
+            addAuditLog(`Editou o item ${updatedItem.code} - ${updatedItem.description}.`);
+            setToast({ message: 'Item salvo com sucesso!', type: 'success' });
+        } else { // Creating
+             const newItem: Item = {
+                ...itemToEdit,
+                id: `item-${Date.now()}`,
+                code: itemToEdit.code!.trim(),
+                description: itemToEdit.description!.trim(),
+                category: itemToEdit.category!.trim(),
+                location: itemToEdit.location!.trim(),
+                unit: itemToEdit.unit!.trim(),
+                totalValue: (itemToEdit.stockQuantity || 0) * (itemToEdit.avgUnitValue || 0)
+            } as Item;
+            setItems(prevItems => [...prevItems, newItem]);
+            addAuditLog(`Criou o item ${newItem.code} - ${newItem.description}.`);
+            setToast({ message: 'Item criado com sucesso!', type: 'success' });
+        }
+        
         closeEditModal();
     };
 
@@ -230,26 +317,6 @@ const StockList: React.FC<StockListProps> = ({ items, setItems, setActivePage, s
         link.click();
         document.body.removeChild(link);
         URL.revokeObjectURL(url);
-    };
-
-    const generateZplForItem = (item: Item): string => {
-        const sanitizedDescription = item.description.replace(/[\^~]/g, '').substring(0, 50);
-        const zpl = `
-^XA
-^CI28
-^FO50,50
-^BQN,2,6
-^FDQA,${item.code}^FS
-^FO250,60
-^A0N,35,35
-^FD${item.code}^FS
-^FO250,110
-^A0N,25,25
-^FB320,3,0,L,0
-^FD${sanitizedDescription}^FS
-^XZ
-`;
-        return zpl.trim();
     };
 
     const downloadZpl = (zpl: string, filename: string) => {
@@ -421,9 +488,19 @@ const StockList: React.FC<StockListProps> = ({ items, setItems, setActivePage, s
                             {paginatedItems.length > 0 ? (
                                 paginatedItems.map((item, index) => {
                                     const isLowStock = item.stockQuantity <= item.minQuantity;
-                                    const rowClass = isLowStock ? 'bg-red-50' : index % 2 === 0 ? 'bg-white' : 'bg-gray-50';
+                                    const isSelected = selectedItems.includes(item.id);
+                                    
+                                    let rowClass = '';
+                                    if (isSelected) {
+                                        rowClass = 'bg-blue-100'; // Selected items have a distinct blue background
+                                    } else if (isLowStock) {
+                                        rowClass = 'bg-red-50';
+                                    } else {
+                                        rowClass = index % 2 === 0 ? 'bg-white' : 'bg-gray-50';
+                                    }
+
                                     return (
-                                        <tr key={item.id} className={rowClass}>
+                                        <tr key={item.id} className={`${rowClass} transition-colors duration-200 ease-in-out`}>
                                              <td className="px-6 py-4 whitespace-nowrap">
                                                 <input 
                                                     type="checkbox"
@@ -456,7 +533,7 @@ const StockList: React.FC<StockListProps> = ({ items, setItems, setActivePage, s
                                                 <button onClick={() => openHistoryModal(item)} className="text-gray-600 hover:text-gray-900 transition-colors" title="Ver Histórico">
                                                     <HistoryIcon />
                                                 </button>
-                                                <button onClick={() => setQrCodeItem(item)} className="text-gray-600 hover:text-gray-900 transition-colors" title="Gerar QR Code">
+                                                <button onClick={() => setPreviewItem(item)} className="text-gray-600 hover:text-gray-900 transition-colors" title="Gerar Etiqueta com QR Code">
                                                     <QrCodeIcon />
                                                 </button>
                                                 <button onClick={() => handleNewEntryForItem(item)} className="text-green-600 hover:text-green-900 transition-colors" title="Registrar Entrada">
@@ -631,33 +708,56 @@ const StockList: React.FC<StockListProps> = ({ items, setItems, setActivePage, s
                     </div>
                 )}
             </Modal>
-
-             <Modal isOpen={!!qrCodeItem} onClose={() => setQrCodeItem(null)} title={`QR Code - ${qrCodeItem?.code}`}>
-                {qrCodeItem && (
+            
+            <Modal isOpen={!!previewItem} onClose={() => setPreviewItem(null)} title={`Etiqueta - ${previewItem?.code}`}>
+                {previewItem && (
                     <>
-                        <div className="flex flex-col items-center justify-center space-y-4">
-                            <div ref={qrCodeRef} className="p-2 bg-white border"></div>
-                            <div className="text-center">
-                                <p className="font-bold text-lg">{qrCodeItem.code}</p>
-                                <p className="text-gray-600">{qrCodeItem.description}</p>
-                            </div>
+                        <div className="flex flex-col items-center justify-center space-y-4 min-h-[300px]">
+                            {isPreviewLoading && (
+                                <div className="flex flex-col items-center justify-center">
+                                    <svg className="animate-spin -ml-1 mr-3 h-10 w-10 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                    </svg>
+                                    <p className="mt-2 text-gray-600">Gerando pré-visualização...</p>
+                                </div>
+                            )}
+                            {previewError && (
+                                <div className="text-center text-red-600">
+                                    <p>Falha ao gerar a pré-visualização.</p>
+                                    <p className="text-sm">Verifique sua conexão com a internet e tente novamente.</p>
+                                </div>
+                            )}
+                            {previewUrl && !previewError && (
+                                <img 
+                                    src={previewUrl} 
+                                    className="max-w-full h-auto border rounded-md" 
+                                    alt="Pré-visualização da Etiqueta"
+                                    onLoad={() => setIsPreviewLoading(false)}
+                                    onError={() => {
+                                        setPreviewError(true);
+                                        setIsPreviewLoading(false);
+                                    }}
+                                    style={{ display: isPreviewLoading ? 'none' : 'block' }}
+                                />
+                            )}
                         </div>
                         <div className="flex justify-end gap-4 pt-6 mt-4 border-t">
                              <Button onClick={() => {
-                                if (qrCodeItem) {
-                                    const zpl = generateZplForItem(qrCodeItem);
-                                    downloadZpl(zpl, `qrcode_${qrCodeItem.code}.zpl`);
+                                if (previewItem) {
+                                    const zpl = generateZplForItem(previewItem);
+                                    downloadZpl(zpl, `qrcode_${previewItem.code}.zpl`);
                                 }
-                            }} className="bg-gray-600 hover:bg-gray-700">
+                            }} className="bg-gray-600 hover:bg-gray-700" disabled={isPreviewLoading || previewError}>
                                 <ExportIcon />
                                 Baixar ZPL
                             </Button>
                             <Button onClick={() => {
-                                if (qrCodeItem) {
-                                    const zpl = generateZplForItem(qrCodeItem);
-                                    printZpl(zpl, `Imprimir QR Code - ${qrCodeItem.code}`);
+                                if (previewItem) {
+                                    const zpl = generateZplForItem(previewItem);
+                                    printZpl(zpl, `Imprimir QR Code - ${previewItem.code}`);
                                 }
-                            }}>
+                            }} disabled={isPreviewLoading || previewError}>
                                 <PrintIcon />
                                 Imprimir ZPL
                             </Button>

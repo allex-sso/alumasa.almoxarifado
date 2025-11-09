@@ -10,9 +10,10 @@ import Toast from './ui/Toast';
 interface InventoryProps {
     items: Item[];
     setItems: React.Dispatch<React.SetStateAction<Item[]>>;
+    addAuditLog: (action: string) => void;
 }
 
-const Inventory: React.FC<InventoryProps> = ({ items, setItems }) => {
+const Inventory: React.FC<InventoryProps> = ({ items, setItems, addAuditLog }) => {
     const [filterCategory, setFilterCategory] = useState('');
     const [filterLocation, setFilterLocation] = useState('');
     const [searchTerm, setSearchTerm] = useState('');
@@ -81,20 +82,22 @@ const Inventory: React.FC<InventoryProps> = ({ items, setItems }) => {
     }, [countedQuantities, filteredItems.length, itemsToUpdate]);
 
     const handleSaveInventory = () => {
+        itemsToUpdate.forEach(item => {
+            addAuditLog(`Ajustou o estoque do item ${item.code} de ${item.stockQuantity} para ${item.newQuantity}.`);
+        });
+
         const updatedItems = items.map(item => {
-            const countedStr = countedQuantities[item.id];
-            if (countedStr !== undefined && countedStr.trim() !== '') {
-                const countedQty = parseFloat(countedStr);
-                if (!isNaN(countedQty)) {
-                    return {
-                        ...item,
-                        stockQuantity: countedQty,
-                        totalValue: countedQty * item.avgUnitValue,
-                    };
-                }
+            const itemUpdate = itemsToUpdate.find(i => i.id === item.id);
+            if (itemUpdate) {
+                return {
+                    ...item,
+                    stockQuantity: itemUpdate.newQuantity,
+                    totalValue: itemUpdate.newQuantity * item.avgUnitValue,
+                };
             }
             return item;
         });
+
         setItems(updatedItems);
         setCountedQuantities({});
         setIsConfirmModalOpen(false);
@@ -201,7 +204,8 @@ const Inventory: React.FC<InventoryProps> = ({ items, setItems }) => {
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700 font-medium">{systemQty.toLocaleString('pt-BR')}</td>
                                         <td className="px-6 py-4 whitespace-nowrap">
                                             <Input
-                                                ref={el => inputRefs.current[index] = el}
+                                                // FIX: Changed concise arrow function to block body to prevent implicit return value, which is invalid for a ref callback.
+                                                ref={el => { inputRefs.current[index] = el; }}
                                                 type="number"
                                                 className="w-28 text-center"
                                                 min="0"

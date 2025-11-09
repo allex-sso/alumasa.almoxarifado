@@ -1,5 +1,5 @@
 
-import { Item, Supplier, Category, Location, User, EntryExitRecord } from '../types';
+import { Item, Supplier, Category, Location, User, EntryExitRecord, AuditLog } from '../types';
 
 export const mockUsers: User[] = [
   { id: '1', name: 'Admin', email: 'admin@alumasa.com', role: 'Admin', password: 'admin', profilePictureUrl: 'https://picsum.photos/seed/admin/100' },
@@ -60,4 +60,28 @@ export const mockEntryExitHistory: EntryExitRecord[] = [
     { id: 'h10', itemId: '1', type: 'entry', quantity: 500, date: new Date(today.getFullYear(), today.getMonth(), 5).toISOString().split('T')[0] },
     { id: 'h11', itemId: '3', type: 'exit', quantity: 40, date: new Date(today.getFullYear(), today.getMonth(), 8).toISOString().split('T')[0] },
     { id: 'h12', itemId: '5', type: 'exit', quantity: 10, date: new Date(today.getFullYear(), today.getMonth(), 10).toISOString().split('T')[0] },
+];
+
+export const mockAuditLogs: AuditLog[] = [
+    {
+        id: 'log-1',
+        timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+        userId: '1',
+        userName: 'Admin',
+        action: 'Fez login no sistema.'
+    },
+    {
+        id: 'log-2',
+        timestamp: new Date(Date.now() - 1.5 * 60 * 60 * 1000).toISOString(),
+        userId: '1',
+        userName: 'Admin',
+        action: 'Criou o item SOL-005 - Eletrodo para Solda.'
+    },
+    {
+        id: 'log-3',
+        timestamp: new Date(Date.now() - 1 * 60 * 60 * 1000).toISOString(),
+        userId: '2',
+        userName: 'Operador',
+        action: 'Registrou saída de 10 unidade(s) do item SOL-005 para Manutenção.'
+    },
 ];

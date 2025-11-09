@@ -13,9 +13,10 @@ interface BackupRestoreProps {
     setItems: React.Dispatch<React.SetStateAction<Item[]>>;
     setUsers: React.Dispatch<React.SetStateAction<User[]>>;
     setHistory: React.Dispatch<React.SetStateAction<EntryExitRecord[]>>;
+    addAuditLog: (action: string) => void;
 }
 
-const BackupRestore: React.FC<BackupRestoreProps> = ({ items, users, history, setItems, setUsers, setHistory }) => {
+const BackupRestore: React.FC<BackupRestoreProps> = ({ items, users, history, setItems, setUsers, setHistory, addAuditLog }) => {
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
     const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
     const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
@@ -40,6 +41,7 @@ const BackupRestore: React.FC<BackupRestoreProps> = ({ items, users, history, se
             a.click();
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
+            addAuditLog('Gerou um arquivo de backup do sistema.');
             setToast({ message: 'Arquivo de backup gerado com sucesso!', type: 'success' });
         } catch (error) {
             setToast({ message: 'Ocorreu um erro ao gerar o backup.', type: 'error' });
@@ -81,6 +83,7 @@ const BackupRestore: React.FC<BackupRestoreProps> = ({ items, users, history, se
                 setUsers(data.users);
                 setHistory(data.history);
 
+                addAuditLog(`Restaurou o sistema a partir do arquivo ${selectedFile.name}.`);
                 setToast({ message: 'Sistema restaurado com sucesso a partir do backup!', type: 'success' });
             } catch (error: any) {
                 console.error("Restore failed:", error);

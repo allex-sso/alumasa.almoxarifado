@@ -8,10 +8,11 @@ import Reports from './components/Reports';
 import Login from './components/Login';
 import UserManagement from './components/UserManagement';
 import ChangePasswordModal from './components/ChangePasswordModal';
-import Inventory from './components/Inventory'; // Import new component
+import Inventory from './components/Inventory';
 import BackupRestore from './components/BackupRestore';
-import { Page, Item, User, EntryExitRecord } from './types';
-import { mockUsers, mockItems, mockEntryExitHistory } from './data/mock';
+import AuditLog from './components/AuditLog';
+import { Page, Item, User, EntryExitRecord, AuditLog as AuditLogType } from './types';
+import { mockUsers, mockItems, mockEntryExitHistory, mockAuditLogs } from './data/mock';
 
 const App: React.FC = () => {
   const [authenticatedUser, setAuthenticatedUser] = useState<User | null>(null);
@@ -21,11 +22,26 @@ const App: React.FC = () => {
   const [users, setUsers] = useState<User[]>(mockUsers);
   const [items, setItems] = useState<Item[]>(mockItems);
   const [entryExitHistory, setEntryExitHistory] = useState<EntryExitRecord[]>(mockEntryExitHistory);
+  const [auditLogs, setAuditLogs] = useState<AuditLogType[]>(mockAuditLogs);
   const [changePasswordUser, setChangePasswordUser] = useState<User | null>(null);
   const [initialStockSearch, setInitialStockSearch] = useState<string>('');
+  
+  const addAuditLog = (action: string, userOverride?: User) => {
+    const user = userOverride || authenticatedUser;
+    if (!user) return;
+    const newLog: AuditLogType = {
+      id: `log-${Date.now()}`,
+      timestamp: new Date().toISOString(),
+      userId: user.id,
+      userName: user.name,
+      action,
+    };
+    setAuditLogs(prevLogs => [newLog, ...prevLogs]);
+  };
 
 
   const handleLogout = () => {
+    addAuditLog('Fez logout do sistema.');
     setAuthenticatedUser(null);
     setCurrentPage('dashboard');
   };
@@ -47,9 +63,12 @@ const App: React.FC = () => {
     setUsers(prevUsers =>
       prevUsers.map(u => (u.id === userId ? { ...u, password: newPassword } : u))
     );
-
+    
     if (authenticatedUser?.id === userId) {
+      addAuditLog(`Alterou a própria senha.`);
       setAuthenticatedUser(prev => prev ? { ...prev, password: newPassword } : null);
+    } else {
+      addAuditLog(`Alterou a senha do usuário ${userToUpdate.name}.`);
     }
     
     if (wasForcedChange) {
@@ -64,6 +83,7 @@ const App: React.FC = () => {
       setChangePasswordUser(user);
     } else {
       setAuthenticatedUser(user);
+      addAuditLog('Fez login no sistema.', user);
     }
   };
 
@@ -80,6 +100,13 @@ const App: React.FC = () => {
   const renderPage = useCallback(() => {
     if (!authenticatedUser) return null;
 
+    // Enforce admin-only pages
+    const adminPages: Page[] = ['users', 'inventory', 'audit', 'backup'];
+    if (adminPages.includes(currentPage) && authenticatedUser.role !== 'Admin') {
+        // Redirect non-admins trying to access admin pages to the dashboard
+        return <Dashboard items={items} history={entryExitHistory} setCurrentPage={setCurrentPage} />;
+    }
+
     switch (currentPage) {
       case 'dashboard':
         return <Dashboard items={items} history={entryExitHistory} setCurrentPage={setCurrentPage} />;
@@ -93,21 +120,25 @@ const App: React.FC = () => {
                     history={entryExitHistory} 
                     initialSearchTerm={initialStockSearch}
                     clearInitialSearch={() => setInitialStockSearch('')}
+                    addAuditLog={addAuditLog}
                 />;
       case 'new-entry':
-        return <NewEntry items={items} setItems={setItems} itemForEntry={itemForEntry} clearItemForEntry={() => setItemForEntry(null)} />;
+        return <NewEntry items={items} setItems={setItems} itemForEntry={itemForEntry} clearItemForEntry={() => setItemForEntry(null)} addAuditLog={addAuditLog} />;
       case 'new-exit':
-        return <NewExit items={items} setItems={setItems} itemForExit={itemForExit} clearItemForExit={() => setItemForExit(null)} />;
+        return <NewExit items={items} setItems={setItems} itemForExit={itemForExit} clearItemForExit={() => setItemForExit(null)} addAuditLog={addAuditLog} />;
       case 'reports':
         return <Reports items={items} history={entryExitHistory} />;
       case 'users':
         return <UserManagement 
                     users={users} 
                     setUsers={setUsers} 
-                    onChangePassword={onRequestChangePasswordForUser} 
+                    onChangePassword={onRequestChangePasswordForUser}
+                    addAuditLog={addAuditLog}
                 />;
       case 'inventory':
-          return <Inventory items={items} setItems={setItems} />;
+          return <Inventory items={items} setItems={setItems} addAuditLog={addAuditLog} />;
+      case 'audit':
+          return <AuditLog logs={auditLogs} users={users} />;
       case 'backup':
           return <BackupRestore 
                     items={items}
@@ -116,11 +147,12 @@ const App: React.FC = () => {
                     setItems={setItems}
                     setUsers={setUsers}
                     setHistory={setEntryExitHistory}
+                    addAuditLog={addAuditLog}
                   />;
       default:
         return <Dashboard items={items} history={entryExitHistory} setCurrentPage={setCurrentPage} />;
     }
-  }, [currentPage, itemForEntry, itemForExit, authenticatedUser, users, items, entryExitHistory, initialStockSearch]);
+  }, [currentPage, itemForEntry, itemForExit, authenticatedUser, users, items, entryExitHistory, auditLogs, initialStockSearch]);
 
   if (!authenticatedUser && !changePasswordUser) {
     return <Login onLogin={handleLogin} users={users} />;

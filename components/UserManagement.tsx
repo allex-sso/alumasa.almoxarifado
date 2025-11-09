@@ -13,9 +13,10 @@ interface UserManagementProps {
   users: User[];
   setUsers: React.Dispatch<React.SetStateAction<User[]>>;
   onChangePassword: (user: User) => void;
+  addAuditLog: (action: string) => void;
 }
 
-const UserManagement: React.FC<UserManagementProps> = ({ users, setUsers, onChangePassword }) => {
+const UserManagement: React.FC<UserManagementProps> = ({ users, setUsers, onChangePassword, addAuditLog }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [currentUser, setCurrentUser] = useState<Partial<User> | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -38,6 +39,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ users, setUsers, onChan
 
     if (currentUser.id) { // Editing existing user
       setUsers(users.map(u => u.id === currentUser.id ? currentUser as User : u));
+      addAuditLog(`Editou os dados do usuário ${currentUser.name} (${currentUser.email}).`);
       setToastMessage('Usuário atualizado com sucesso!');
     } else { // Creating new user
       const newUser: User = {
@@ -47,14 +49,19 @@ const UserManagement: React.FC<UserManagementProps> = ({ users, setUsers, onChan
         password: 'changeme' // default password
       } as User;
       setUsers([...users, newUser]);
+      addAuditLog(`Criou o usuário ${newUser.name} (${newUser.email}).`);
       setToastMessage('Usuário criado com sucesso!');
     }
     closeModal();
   };
   
   const handleDeleteUser = (userId: string) => {
-    if (window.confirm('Tem certeza que deseja excluir este usuário?')) {
+    const userToDelete = users.find(u => u.id === userId);
+    if (!userToDelete) return;
+
+    if (window.confirm(`Tem certeza que deseja excluir o usuário ${userToDelete.name}?`)) {
         setUsers(users.filter(u => u.id !== userId));
+        addAuditLog(`Excluiu o usuário ${userToDelete.name} (${userToDelete.email}).`);
         setToastMessage('Usuário excluído com sucesso!');
     }
   };

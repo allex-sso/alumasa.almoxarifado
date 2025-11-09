@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Card from './ui/Card';
 import Input from './ui/Input';
 import Button from './ui/Button';
@@ -11,9 +11,10 @@ interface NewEntryProps {
     setItems: React.Dispatch<React.SetStateAction<Item[]>>;
     itemForEntry: Item | null;
     clearItemForEntry: () => void;
+    addAuditLog: (action: string) => void;
 }
 
-const NewEntry: React.FC<NewEntryProps> = ({ items, setItems, itemForEntry, clearItemForEntry }) => {
+const NewEntry: React.FC<NewEntryProps> = ({ items, setItems, itemForEntry, clearItemForEntry, addAuditLog }) => {
     const [isPreFilled] = useState(!!itemForEntry);
     const [code, setCode] = useState(itemForEntry?.code || '');
     const [description, setDescription] = useState(itemForEntry?.description || '');
@@ -25,6 +26,7 @@ const NewEntry: React.FC<NewEntryProps> = ({ items, setItems, itemForEntry, clea
     const [status, setStatus] = useState<{type: 'success' | 'error', text: string} | null>(null);
     const [codeError, setCodeError] = useState<string | null>(null);
     const [isItemLocked, setIsItemLocked] = useState(!!itemForEntry);
+    const quantityInputRef = useRef<HTMLInputElement>(null);
 
 
     useEffect(() => {
@@ -54,10 +56,18 @@ const NewEntry: React.FC<NewEntryProps> = ({ items, setItems, itemForEntry, clea
             setDescription(foundItem.description);
             setCodeError(null);
             setIsItemLocked(true);
+            quantityInputRef.current?.focus(); // Move focus on success
         } else {
             setDescription(''); // Clear description if code is invalid
             setCodeError('Código do item não encontrado.');
             setIsItemLocked(false);
+        }
+    };
+
+    const handleCodeKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            handleCodeBlur(); // Trigger the same logic as blur
         }
     };
 
@@ -78,23 +88,39 @@ const NewEntry: React.FC<NewEntryProps> = ({ items, setItems, itemForEntry, clea
     const handleSubmit = async (event: React.FormEvent) => {
         event.preventDefault();
         
+        setStatus(null); // Clear previous status messages
+
         if (codeError) {
-             setStatus({type: 'error', text: 'Por favor, corrija os erros antes de continuar.'});
+             setStatus({type: 'error', text: 'Por favor, corrija o código do item antes de continuar.'});
              return;
         }
         
-        if (!code || !description || !quantity || !supplier || !invoice) {
-            setStatus({type: 'error', text: 'Todos os campos, exceto observações, são obrigatórios.'});
+        if (!code.trim()) {
+            setStatus({type: 'error', text: 'O campo "Código" é obrigatório.'});
             return;
         }
-
+        if (!description.trim()) {
+            setStatus({type: 'error', text: 'O campo "Descrição" é obrigatório. Busque por um código válido.'});
+            return;
+        }
+        if (!quantity) {
+            setStatus({type: 'error', text: 'O campo "Quantidade" é obrigatório.'});
+            return;
+        }
         if (parseFloat(quantity) <= 0) {
             setStatus({type: 'error', text: 'A quantidade deve ser maior que zero.'});
             return;
         }
+        if (!supplier.trim()) {
+            setStatus({type: 'error', text: 'O campo "Fornecedor" é obrigatório.'});
+            return;
+        }
+        if (!invoice.trim()) {
+            setStatus({type: 'error', text: 'O campo "Nota Fiscal" é obrigatório.'});
+            return;
+        }
 
         setIsLoading(true);
-        setStatus(null);
 
         // Re-validate the item just before submitting
         const itemToUpdate = items.find(i => i.code.toLowerCase() === code.toLowerCase());
@@ -118,7 +144,8 @@ const NewEntry: React.FC<NewEntryProps> = ({ items, setItems, itemForEntry, clea
             }
             return item;
         }));
-
+        
+        addAuditLog(`Registrou entrada de ${quantity} unidade(s) para o item ${itemToUpdate.code}.`);
         setIsLoading(false);
         setStatus({type: 'success', text: 'Entrada registrada com sucesso!'});
         
@@ -160,6 +187,7 @@ const NewEntry: React.FC<NewEntryProps> = ({ items, setItems, itemForEntry, clea
                                 value={code} 
                                 onChange={handleCodeChange}
                                 onBlur={handleCodeBlur}
+                                onKeyDown={handleCodeKeyDown}
                                 placeholder="e.g., PAR-001" 
                                 required 
                                 readOnly={isPreFilled} 
@@ -169,7 +197,7 @@ const NewEntry: React.FC<NewEntryProps> = ({ items, setItems, itemForEntry, clea
                         </div>
                         <div>
                             <label htmlFor="quantity" className="block text-sm font-medium text-gray-700 mb-1">Quantidade</label>
-                            <Input id="quantity" type="number" value={quantity} onChange={e => setQuantity(e.target.value)} placeholder="e.g., 100" min="0.01" step="any" required />
+                            <Input ref={quantityInputRef} id="quantity" type="number" value={quantity} onChange={e => setQuantity(e.target.value)} placeholder="e.g., 100" min="0.01" step="any" required />
                         </div>
                         <div className="md:col-span-2">
                             <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-1">Descrição</label>

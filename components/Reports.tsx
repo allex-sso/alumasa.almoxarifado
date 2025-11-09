@@ -58,7 +58,6 @@ const Reports: React.FC<ReportsProps> = ({ items, history }) => {
     const lowStockItems = filteredItems.filter(item => item.stockQuantity <= item.minQuantity);
     const movementHistory = filteredHistory.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     const valueByLocation = filteredItems.reduce((acc, item) => {
-        // FIX: Explicitly cast item.totalValue to a number to prevent string concatenation issues.
         acc[item.location] = (acc[item.location] || 0) + Number(item.totalValue);
         return acc;
     }, {} as Record<string, number>);
@@ -212,7 +211,6 @@ const Reports: React.FC<ReportsProps> = ({ items, history }) => {
                     <tr>
                       <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Data</th>
                       <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Cód. Item</th>
-                      {/* FIX: Add missing Description column to match exports */}
                       <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Descrição</th>
                       <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Tipo</th>
                       <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Quantidade</th>
@@ -225,7 +223,6 @@ const Reports: React.FC<ReportsProps> = ({ items, history }) => {
                         <tr key={record.id}>
                           <td className="px-4 py-2 whitespace-nowrap text-sm">{new Date(record.date).toLocaleDateString('pt-BR')}</td>
                           <td className="px-4 py-2 whitespace-nowrap text-sm">{item?.code || 'N/A'}</td>
-                          {/* FIX: Add missing Description data cell to match exports */}
                           <td className="px-4 py-2 whitespace-nowrap text-sm">{item?.description || 'N/A'}</td>
                           <td className="px-4 py-2 whitespace-nowrap text-sm">
                             <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${record.type === 'entry' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
@@ -244,7 +241,7 @@ const Reports: React.FC<ReportsProps> = ({ items, history }) => {
         case 'locationValue': {
             const { valueByLocation } = filteredReportData;
             const chartData = Object.entries(valueByLocation)
-                .map(([name, value]) => ({ name, value }))
+                .map(([name, value]) => ({ name, value: Number(value) }))
                 .sort((a, b) => b.value - a.value);
 
             return (
@@ -279,7 +276,7 @@ const Reports: React.FC<ReportsProps> = ({ items, history }) => {
                                 margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
                             >
                                 <CartesianGrid strokeDasharray="3 3" />
-                                <XAxis type="number" tickFormatter={(value) => `R$ ${new Intl.NumberFormat('pt-BR').format(value)}`} />
+                                <XAxis type="number" tickFormatter={(value) => `R$ ${new Intl.NumberFormat('pt-BR').format(value as number)}`} />
                                 <YAxis type="category" dataKey="name" width={80} />
                                 <Tooltip formatter={(value: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value)} />
                                 <Legend />

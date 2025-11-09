@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Page, User, Item } from '../types';
-import { DashboardIcon, StockIcon, EntryIcon, ExitIcon, ReportsIcon, LogoutIcon, MenuIcon, CloseIcon, UserIcon, CameraIcon, InventoryIcon, BackupIcon, SearchIcon } from './icons/Icons';
+import { DashboardIcon, StockIcon, ReportsIcon, LogoutIcon, MenuIcon, CloseIcon, UserIcon, CameraIcon, InventoryIcon, BackupIcon, SearchIcon, AuditIcon, MovementIcon, ControlIcon, ChevronRightIcon } from './icons/Icons';
 import Modal from './ui/Modal';
 import Button from './ui/Button';
 import Input from './ui/Input';
@@ -48,23 +48,82 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogout, activePage, s
   const [globalSearchTerm, setGlobalSearchTerm] = useState('');
   const [searchResults, setSearchResults] = useState<Item[]>([]);
   const searchRef = useRef<HTMLDivElement>(null);
+  const [openMenu, setOpenMenu] = useState<string | null>(null);
 
-  const navItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: <DashboardIcon />, role: ['Admin', 'Operator'] },
-    { id: 'stock', label: 'Estoque Atual', icon: <StockIcon />, role: ['Admin', 'Operator'] },
-    { id: 'new-entry', label: 'Nova Entrada', icon: <EntryIcon />, role: ['Admin', 'Operator'] },
-    { id: 'new-exit', label: 'Nova Saída', icon: <ExitIcon />, role: ['Admin', 'Operator'] },
-    { id: 'reports', label: 'Relatórios', icon: <ReportsIcon />, role: ['Admin', 'Operator'] },
-    { id: 'inventory', label: 'Inventário', icon: <InventoryIcon />, role: ['Admin'] },
-    { id: 'users', label: 'Usuários', icon: <UserIcon />, role: ['Admin'] },
-    { id: 'backup', label: 'Backup & Restauração', icon: <BackupIcon />, role: ['Admin'] },
+  const navStructure = [
+    {
+      id: 'dashboard',
+      label: 'Dashboard',
+      icon: <DashboardIcon />,
+      page: 'dashboard' as Page,
+      role: ['Admin', 'Operator'],
+    },
+    {
+      id: 'estoque',
+      label: 'Estoque',
+      icon: <StockIcon />,
+      role: ['Admin', 'Operator'],
+      children: [
+        { id: 'stock', label: 'Estoque Atual', page: 'stock' as Page, role: ['Admin', 'Operator'] },
+        { id: 'inventory', label: 'Inventário', page: 'inventory' as Page, role: ['Admin'] },
+      ],
+    },
+    {
+      id: 'movimentacoes',
+      label: 'Movimentações',
+      icon: <MovementIcon />,
+      role: ['Admin', 'Operator'],
+      children: [
+        { id: 'new-entry', label: 'Nova Entrada', page: 'new-entry' as Page, role: ['Admin', 'Operator'] },
+        { id: 'new-exit', label: 'Nova Saída', page: 'new-exit' as Page, role: ['Admin', 'Operator'] },
+      ],
+    },
+    {
+      id: 'controle',
+      label: 'Controle',
+      icon: <ControlIcon />,
+      role: ['Admin'],
+      children: [
+        { id: 'users', label: 'Usuários', page: 'users' as Page, role: ['Admin'] },
+        { id: 'backup', label: 'Backup & Restauração', page: 'backup' as Page, role: ['Admin'] },
+      ],
+    },
+    {
+        id: 'auditoria',
+        label: 'Auditoria',
+        icon: <AuditIcon />,
+        role: ['Admin'],
+        children: [
+            { id: 'audit', label: 'Monitoramento', page: 'audit' as Page, role: ['Admin'] },
+        ]
+    },
+    {
+      id: 'reports',
+      label: 'Relatórios',
+      icon: <ReportsIcon />,
+      page: 'reports' as Page,
+      role: ['Admin', 'Operator'],
+    },
   ];
+
+  useEffect(() => {
+    const activeParent = navStructure.find(item => 
+        item.children?.some(child => child.page === activePage)
+    );
+    if (activeParent) {
+        setOpenMenu(activeParent.id);
+    }
+  }, [activePage]);
 
   const handleNavigation = (page: Page) => {
       setActivePage(page);
       setSidebarOpen(false);
   };
   
+  const handleMenuToggle = (menuId: string) => {
+    setOpenMenu(prevOpenMenu => (prevOpenMenu === menuId ? null : menuId));
+  };
+
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
@@ -97,7 +156,8 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogout, activePage, s
     reports: 'Relatórios',
     users: 'Gerenciamento de Usuários',
     inventory: 'Inventário',
-    backup: 'Backup e Restauração'
+    backup: 'Backup e Restauração',
+    audit: 'Log de Auditoria',
   };
 
   useEffect(() => {
@@ -139,23 +199,83 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogout, activePage, s
   const sidebarContent = (
     <>
       <div className="flex flex-col items-center justify-center p-4 border-b border-blue-900 text-center">
-         <h1 className="text-2xl font-bold text-white">Alumasa</h1>
-         <span className="text-sm text-gray-300">Controle do Almoxarifado</span>
+         <h1 className="text-2xl font-semibold text-white">Alumasa</h1>
+         <span className="text-sm text-gray-300 mt-2">Controle do Almoxarifado</span>
       </div>
-      <nav className="flex-1 p-4">
+      <nav className="flex-1 p-2">
         <ul>
-          {navItems.map((item) => (
-            item.role.includes(user.role) && (
-                 <NavLink
-                    key={item.id}
-                    icon={item.icon}
-                    label={item.label}
-                    isActive={activePage === item.id}
-                    onClick={() => handleNavigation(item.id as Page)}
-                    disabled={isPasswordChangeForced}
-                />
-            )
-          ))}
+            {navStructure.map((group) => {
+                const userHasAccessToGroup = group.children
+                    ? group.children.some(child => (!child.role || child.role.includes(user.role)))
+                    : group.role.includes(user.role);
+
+                if (!userHasAccessToGroup) {
+                    return null;
+                }
+
+                if (!group.children) {
+                    return (
+                        <NavLink
+                            key={group.id}
+                            icon={group.icon}
+                            label={group.label}
+                            isActive={activePage === group.page}
+                            onClick={() => handleNavigation(group.page!)}
+                            disabled={isPasswordChangeForced}
+                        />
+                    );
+                }
+
+                const isGroupActive = group.children.some(child => child.page === activePage);
+                const isMenuOpen = openMenu === group.id;
+
+                return (
+                    <li key={group.id} className="my-1 text-gray-300">
+                        <div
+                            className={`flex items-center justify-between p-3 rounded-lg transition-colors cursor-pointer ${
+                                isPasswordChangeForced
+                                    ? 'text-gray-500 cursor-not-allowed'
+                                    : isGroupActive
+                                    ? 'bg-blue-800 text-white'
+                                    : 'hover:bg-blue-800 hover:text-white'
+                            }`}
+                            onClick={!isPasswordChangeForced ? () => handleMenuToggle(group.id) : undefined}
+                            role="button"
+                        >
+                            <div className="flex items-center">
+                                {group.icon}
+                                <span className="ml-4 font-medium">{group.label}</span>
+                            </div>
+                            <ChevronRightIcon className={`w-5 h-5 transition-transform ${isMenuOpen ? 'rotate-90' : ''}`} />
+                        </div>
+                        {isMenuOpen && (
+                            <ul className="pl-6 pt-1 transition-all duration-300">
+                                {group.children.map(child => {
+                                    if (child.role && !child.role.includes(user.role)) {
+                                        return null;
+                                    }
+                                    const isChildActive = activePage === child.page;
+                                    return (
+                                        <li
+                                            key={child.id}
+                                            className={`p-2 my-1 rounded-md text-sm transition-colors ${
+                                                isPasswordChangeForced
+                                                    ? 'text-gray-500 cursor-not-allowed'
+                                                    : isChildActive
+                                                    ? 'bg-blue-600 text-white'
+                                                    : 'text-gray-400 hover:text-white cursor-pointer'
+                                            }`}
+                                            onClick={!isPasswordChangeForced ? () => handleNavigation(child.page) : undefined}
+                                        >
+                                            {child.label}
+                                        </li>
+                                    );
+                                })}
+                            </ul>
+                        )}
+                    </li>
+                );
+            })}
         </ul>
       </nav>
       <div className="p-4 border-t border-blue-900">

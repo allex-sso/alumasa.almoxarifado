@@ -71,7 +71,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, users }) => {
       <div className="w-full max-w-md px-4">
         <div className="flex flex-col items-center mb-6">
            <h1 className="text-4xl font-bold text-white">Alumasa</h1>
-          <h2 className="text-2xl font-semibold text-white mt-4">Controle do Almoxarifado</h2>
+          <h2 className="text-xl font-semibold text-white mt-4">Controle do Almoxarifado</h2>
         </div>
         <Card>
           <form onSubmit={handleSubmit} className="p-8 space-y-6">

@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { WarningIcon, CheckCircleIcon } from '../icons/Icons';
+import { WarningIcon, CheckCircleIcon, XCircleIcon } from '../icons/Icons';
 
 const typeClasses = {
   warning: {
@@ -16,11 +16,18 @@ const typeClasses = {
     buttonHover: 'hover:bg-green-200',
     ring: 'focus:ring-green-400',
   },
+  error: {
+    bg: 'bg-red-100 border-red-400',
+    text: 'text-red-800',
+    icon: <XCircleIcon />,
+    buttonHover: 'hover:bg-red-200',
+    ring: 'focus:ring-red-400',
+  },
 };
 
 interface ToastProps {
   message: string;
-  type: 'warning' | 'success';
+  type: 'warning' | 'success' | 'error';
   onClose: () => void;
 }
 
@@ -37,7 +44,7 @@ const Toast: React.FC<ToastProps> = ({ message, type, onClose }) => {
 
   return (
     <div 
-      className={`fixed top-5 right-5 z-50 max-w-sm w-full p-4 rounded-lg shadow-lg border-l-4 flex items-center transition-opacity duration-300 animate-fade-in-right ${classes.bg}`}
+      className={`fixed top-5 right-5 z-[9999] max-w-sm w-full p-4 rounded-lg shadow-lg border-l-4 flex items-center transition-opacity duration-300 animate-fade-in-right ${classes.bg}`}
       role="alert"
     >
       <div className={`flex-shrink-0 ${classes.text}`}>

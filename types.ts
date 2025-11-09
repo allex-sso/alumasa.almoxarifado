@@ -1,4 +1,4 @@
-export type Page = 'dashboard' | 'stock' | 'new-entry' | 'new-exit' | 'reports' | 'users' | 'inventory' | 'backup';
+export type Page = 'dashboard' | 'stock' | 'new-entry' | 'new-exit' | 'reports' | 'users' | 'inventory' | 'backup' | 'audit';
 
 export type Role = 'Admin' | 'Operator';
 
@@ -46,4 +46,12 @@ export interface EntryExitRecord {
   type: 'entry' | 'exit';
   quantity: number;
   date: string; // ISO string format 'YYYY-MM-DD'
+}
+
+export interface AuditLog {
+  id: string;
+  timestamp: string; // ISO string
+  userId: string;
+  userName: string;
+  action: string;
 }

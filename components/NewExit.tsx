@@ -10,9 +10,10 @@ interface NewExitProps {
     setItems: React.Dispatch<React.SetStateAction<Item[]>>;
     itemForExit: Item | null;
     clearItemForExit: () => void;
+    addAuditLog: (action: string) => void;
 }
 
-const NewExit: React.FC<NewExitProps> = ({ items, setItems, itemForExit, clearItemForExit }) => {
+const NewExit: React.FC<NewExitProps> = ({ items, setItems, itemForExit, clearItemForExit, addAuditLog }) => {
     const [isPreFilled] = useState(!!itemForExit);
     const [itemId, setItemId] = useState(itemForExit?.id || '');
     const [quantity, setQuantity] = useState('');
@@ -122,14 +123,27 @@ const NewExit: React.FC<NewExitProps> = ({ items, setItems, itemForExit, clearIt
     const handleSubmit = async (event: React.FormEvent) => {
         event.preventDefault();
         
-        if (!itemId || !quantity || !requester || !responsible) {
-            setStatus({type: 'error', text: 'Todos os campos são obrigatórios. Por favor, selecione um item da lista.'});
+        setStatus(null); // Clear previous status messages
+
+        if (!itemId) {
+            setStatus({type: 'error', text: 'É obrigatório selecionar um item da lista.'});
             return;
         }
-
+        if (!quantity) {
+            setStatus({type: 'error', text: 'O campo "Quantidade" é obrigatório.'});
+            return;
+        }
         const qty = parseFloat(quantity);
         if (qty <= 0) {
             setStatus({type: 'error', text: 'A quantidade deve ser maior que zero.'});
+            return;
+        }
+        if (!requester.trim()) {
+            setStatus({type: 'error', text: 'O campo "Solicitante / Setor" é obrigatório.'});
+            return;
+        }
+        if (!responsible.trim()) {
+            setStatus({type: 'error', text: 'O campo "Responsável" é obrigatório.'});
             return;
         }
 
@@ -139,7 +153,6 @@ const NewExit: React.FC<NewExitProps> = ({ items, setItems, itemForExit, clearIt
         }
 
         setIsLoading(true);
-        setStatus(null);
         setItemError(null);
 
         // Simulate API call
@@ -156,7 +169,8 @@ const NewExit: React.FC<NewExitProps> = ({ items, setItems, itemForExit, clearIt
             }
             return item;
         }));
-
+        
+        addAuditLog(`Registrou saída de ${qty} unidade(s) do item ${selectedItem?.code} para ${requester}.`);
         setIsLoading(false);
         setStatus({type: 'success', text: 'Saída registrada com sucesso!'});
         
