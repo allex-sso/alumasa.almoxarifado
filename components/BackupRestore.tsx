@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { Item, User, EntryExitRecord } from '../types';
+import { Item, User, EntryExitRecord, Supplier, Category, UnitOfMeasurement, AuditLog as AuditLogType } from '../types';
 import Card from './ui/Card';
 import Button from './ui/Button';
 import Modal from './ui/Modal';
@@ -10,13 +10,37 @@ interface BackupRestoreProps {
     items: Item[];
     users: User[];
     history: EntryExitRecord[];
+    suppliers: Supplier[];
+    categories: Category[];
+    units: UnitOfMeasurement[];
+    auditLogs: AuditLogType[];
     setItems: React.Dispatch<React.SetStateAction<Item[]>>;
     setUsers: React.Dispatch<React.SetStateAction<User[]>>;
     setHistory: React.Dispatch<React.SetStateAction<EntryExitRecord[]>>;
+    setSuppliers: React.Dispatch<React.SetStateAction<Supplier[]>>;
+    setCategories: React.Dispatch<React.SetStateAction<Category[]>>;
+    setUnits: React.Dispatch<React.SetStateAction<UnitOfMeasurement[]>>;
+    setAuditLogs: React.Dispatch<React.SetStateAction<AuditLogType[]>>;
     addAuditLog: (action: string) => void;
 }
 
-const BackupRestore: React.FC<BackupRestoreProps> = ({ items, users, history, setItems, setUsers, setHistory, addAuditLog }) => {
+const BackupRestore: React.FC<BackupRestoreProps> = ({ 
+    items, 
+    users, 
+    history,
+    suppliers,
+    categories,
+    units,
+    auditLogs, 
+    setItems, 
+    setUsers, 
+    setHistory, 
+    setSuppliers,
+    setCategories,
+    setUnits,
+    setAuditLogs,
+    addAuditLog 
+}) => {
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
     const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
     const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
@@ -28,6 +52,10 @@ const BackupRestore: React.FC<BackupRestoreProps> = ({ items, users, history, se
                 items,
                 users,
                 history,
+                suppliers,
+                categories,
+                units,
+                auditLogs,
                 backupDate: new Date().toISOString(),
             };
             const jsonString = JSON.stringify(backupData, null, 2);
@@ -74,7 +102,9 @@ const BackupRestore: React.FC<BackupRestoreProps> = ({ items, users, history, se
                 const data = JSON.parse(text);
 
                 // Basic validation
-                if (!data.items || !data.users || !data.history || !Array.isArray(data.items) || !Array.isArray(data.users) || !Array.isArray(data.history)) {
+                if (!data.items || !data.users || !data.history || !data.suppliers || !data.categories || !data.units || !data.auditLogs || 
+                    !Array.isArray(data.items) || !Array.isArray(data.users) || !Array.isArray(data.history) || 
+                    !Array.isArray(data.suppliers) || !Array.isArray(data.categories) || !Array.isArray(data.units) || !Array.isArray(data.auditLogs)) {
                     throw new Error('Arquivo de backup inválido ou corrompido. A estrutura esperada não foi encontrada.');
                 }
                 
@@ -82,6 +112,10 @@ const BackupRestore: React.FC<BackupRestoreProps> = ({ items, users, history, se
                 setItems(data.items);
                 setUsers(data.users);
                 setHistory(data.history);
+                setSuppliers(data.suppliers);
+                setCategories(data.categories);
+                setUnits(data.units);
+                setAuditLogs(data.auditLogs);
 
                 addAuditLog(`Restaurou o sistema a partir do arquivo ${selectedFile.name}.`);
                 setToast({ message: 'Sistema restaurado com sucesso a partir do backup!', type: 'success' });

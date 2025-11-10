@@ -7,6 +7,7 @@ import { TrashIcon, EntryIcon, HistoryIcon, ExportIcon, EditIcon, ExitIcon, Plus
 import Button from './ui/Button';
 import Modal from './ui/Modal';
 import Toast from './ui/Toast';
+import Pagination from './ui/Pagination';
 
 interface StockListProps {
     items: Item[];
@@ -42,6 +43,7 @@ const StockList: React.FC<StockListProps> = ({ items, suppliers, categories, uni
     const [previewUrl, setPreviewUrl] = useState<string | null>(null);
     const [isPreviewLoading, setIsPreviewLoading] = useState(false);
     const [previewError, setPreviewError] = useState(false);
+    const [isFiltering, setIsFiltering] = useState(false);
     
     // Pagination state
     const [currentPage, setCurrentPage] = useState(1);
@@ -141,7 +143,10 @@ const StockList: React.FC<StockListProps> = ({ items, suppliers, categories, uni
     
     // Reset page to 1 on filter change
     useEffect(() => {
+        setIsFiltering(true);
         setCurrentPage(1);
+        const timer = setTimeout(() => setIsFiltering(false), 300); // Show loading indicator
+        return () => clearTimeout(timer);
     }, [filterCategory, filterStatus, filterLocation, searchTerm]);
 
     const lowStockItems = useMemo(() => items.filter(item => item.stockQuantity <= item.minQuantity), [items]);
@@ -403,17 +408,6 @@ const StockList: React.FC<StockListProps> = ({ items, suppliers, categories, uni
         const allZpl = itemsToProcess.map(item => generateZplForItem(item)).join('\n\n');
         printZpl(allZpl, 'Impressão de QR Codes em Lote');
     };
-
-
-    const PaginationButton: React.FC<{onClick: () => void; disabled: boolean; children: React.ReactNode}> = ({ onClick, disabled, children }) => (
-        <button
-            onClick={onClick}
-            disabled={disabled}
-            className="px-3 py-1 border rounded-md bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-        >
-            {children}
-        </button>
-    );
     
     const isCreating = itemToEdit && !itemToEdit.id;
 
@@ -478,7 +472,15 @@ const StockList: React.FC<StockListProps> = ({ items, suppliers, categories, uni
                         {totalStockValue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                     </p>
                 </div>
-                <div className="overflow-x-auto">
+                <div className="overflow-x-auto relative">
+                    {isFiltering && (
+                        <div className="absolute inset-0 bg-white bg-opacity-75 flex items-center justify-center z-10 transition-opacity">
+                             <svg className="animate-spin h-8 w-8 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                        </div>
+                    )}
                     <table className="min-w-full divide-y divide-gray-200">
                         <thead className="bg-gray-50">
                             <tr>
@@ -584,21 +586,11 @@ const StockList: React.FC<StockListProps> = ({ items, suppliers, categories, uni
                             Mostrando {filteredItems.length > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0}-
                             {Math.min(currentPage * itemsPerPage, filteredItems.length)} de {filteredItems.length} itens
                         </span>
-                        <div className="flex items-center space-x-2">
-                             <PaginationButton onClick={() => setCurrentPage(1)} disabled={currentPage === 1}>
-                                Primeira
-                            </PaginationButton>
-                            <PaginationButton onClick={() => setCurrentPage(p => p - 1)} disabled={currentPage === 1}>
-                                Anterior
-                            </PaginationButton>
-                            <span className="text-sm font-medium text-gray-700 px-2">Página {currentPage} de {totalPages}</span>
-                            <PaginationButton onClick={() => setCurrentPage(p => p + 1)} disabled={currentPage === totalPages}>
-                                Próxima
-                            </PaginationButton>
-                            <PaginationButton onClick={() => setCurrentPage(totalPages)} disabled={currentPage === totalPages}>
-                                Última
-                            </PaginationButton>
-                        </div>
+                        <Pagination 
+                            currentPage={currentPage}
+                            totalPages={totalPages}
+                            onPageChange={setCurrentPage}
+                        />
                     </div>
                 )}
             </Card>

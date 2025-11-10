@@ -162,9 +162,17 @@ const App: React.FC = () => {
                     items={items}
                     users={users}
                     history={entryExitHistory}
+                    suppliers={suppliers}
+                    categories={categories}
+                    units={units}
+                    auditLogs={auditLogs}
                     setItems={setItems}
                     setUsers={setUsers}
                     setHistory={setEntryExitHistory}
+                    setSuppliers={setSuppliers}
+                    setCategories={setCategories}
+                    setUnits={setUnits}
+                    setAuditLogs={setAuditLogs}
                     addAuditLog={addAuditLog}
                   />;
       default:
