@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { Item, Page, EntryExitRecord } from '../types';
+import { Item, Page, EntryExitRecord, Supplier, Category, UnitOfMeasurement } from '../types';
 import Card from './ui/Card';
 import Input from './ui/Input';
 import Select from './ui/Select';
@@ -10,17 +10,22 @@ import Toast from './ui/Toast';
 
 interface StockListProps {
     items: Item[];
+    suppliers: Supplier[];
+    categories: Category[];
+    units: UnitOfMeasurement[];
     setItems: React.Dispatch<React.SetStateAction<Item[]>>;
     setActivePage: (page: Page) => void;
     setItemForEntry: (item: Item) => void;
     setItemForExit: (item: Item) => void;
     history: EntryExitRecord[];
     initialSearchTerm?: string;
-    clearInitialSearch?: () => void;
+    clearInitialSearch: () => void;
+    initialFilters: { category?: string; status?: string };
+    clearInitialFilters: () => void;
     addAuditLog: (action: string) => void;
 }
 
-const StockList: React.FC<StockListProps> = ({ items, setItems, setActivePage, setItemForEntry, setItemForExit, history, initialSearchTerm, clearInitialSearch, addAuditLog }) => {
+const StockList: React.FC<StockListProps> = ({ items, suppliers, categories, units, setItems, setActivePage, setItemForEntry, setItemForExit, history, initialSearchTerm, clearInitialSearch, initialFilters, clearInitialFilters, addAuditLog }) => {
     const [filterCategory, setFilterCategory] = useState('');
     const [filterStatus, setFilterStatus] = useState('');
     const [filterLocation, setFilterLocation] = useState('');
@@ -46,11 +51,23 @@ const StockList: React.FC<StockListProps> = ({ items, setItems, setActivePage, s
     const [toast, setToast] = useState<{ message: string; type: 'success' | 'warning' } | null>(null);
 
     useEffect(() => {
-        if (initialSearchTerm && clearInitialSearch) {
+        if (initialSearchTerm) {
             setSearchTerm(initialSearchTerm);
             clearInitialSearch();
         }
     }, [initialSearchTerm, clearInitialSearch]);
+    
+    useEffect(() => {
+        if (initialFilters?.category) {
+            setFilterCategory(initialFilters.category);
+        }
+        if (initialFilters?.status) {
+            setFilterStatus(initialFilters.status);
+        }
+        if (Object.keys(initialFilters).length > 0) {
+            clearInitialFilters();
+        }
+    }, [initialFilters, clearInitialFilters]);
 
     const generateZplForItem = (item: Item): string => {
         const sanitize = (text: string, maxLength: number) => {
@@ -131,8 +148,9 @@ const StockList: React.FC<StockListProps> = ({ items, setItems, setActivePage, s
     
      // Show toast on initial load if there are low stock items
     useEffect(() => {
-        if (lowStockItems.length > 0) {
+        if (lowStockItems.length > 0 && !sessionStorage.getItem('lowStockNotified')) {
             setToast({ message: `Atenção: ${lowStockItems.length} ${lowStockItems.length > 1 ? 'itens estão' : 'item está'} com estoque baixo.`, type: 'warning' });
+            sessionStorage.setItem('lowStockNotified', 'true');
         }
     }, []); // Empty dependency array ensures this runs only once on mount
 
@@ -151,7 +169,7 @@ const StockList: React.FC<StockListProps> = ({ items, setItems, setActivePage, s
 
     const totalPages = Math.ceil(filteredItems.length / itemsPerPage);
 
-    const categories = [...new Set(items.map(item => item.category))];
+    const uniqueCategories = [...new Set(items.map(item => item.category))];
     const locations = [...new Set(items.map(item => item.location))];
 
     const openDeleteConfirmation = (item: Item) => {
@@ -210,6 +228,7 @@ const StockList: React.FC<StockListProps> = ({ items, setItems, setActivePage, s
             leadTimeDays: 0,
             avgUnitValue: 0,
             totalValue: 0,
+            preferredSupplierId: '',
         });
         setIsEditModalOpen(true);
     };
@@ -438,7 +457,7 @@ const StockList: React.FC<StockListProps> = ({ items, setItems, setActivePage, s
                     />
                     <Select value={filterCategory} onChange={e => setFilterCategory(e.target.value)}>
                         <option value="">Todas Categorias</option>
-                        {categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                        {uniqueCategories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
                     </Select>
                     <Select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
                         <option value="">Todos Status</option>
@@ -659,13 +678,23 @@ const StockList: React.FC<StockListProps> = ({ items, setItems, setActivePage, s
                                 <label htmlFor="code" className="block text-sm font-medium text-gray-700">Código</label>
                                 <Input id="code" name="code" type="text" value={itemToEdit.code || ''} onChange={handleEditInputChange} readOnly={!isCreating} className={!isCreating ? 'bg-gray-100' : ''} />
                             </div>
+                             <div>
+                                <label htmlFor="preferredSupplierId" className="block text-sm font-medium text-gray-700">Fornecedor Preferencial</label>
+                                <Select id="preferredSupplierId" name="preferredSupplierId" value={itemToEdit.preferredSupplierId || ''} onChange={handleEditInputChange}>
+                                    <option value="">Nenhum (Padrão)</option>
+                                    {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                                </Select>
+                            </div>
                             <div className="md:col-span-2">
                                 <label htmlFor="description" className="block text-sm font-medium text-gray-700">Descrição</label>
                                 <Input id="description" name="description" type="text" value={itemToEdit.description || ''} onChange={handleEditInputChange} />
                             </div>
                             <div>
                                 <label htmlFor="category" className="block text-sm font-medium text-gray-700">Categoria</label>
-                                <Input id="category" name="category" type="text" value={itemToEdit.category || ''} onChange={handleEditInputChange} />
+                                <Select id="category" name="category" value={itemToEdit.category || ''} onChange={handleEditInputChange}>
+                                    <option value="">Selecione uma categoria</option>
+                                    {categories.map(cat => <option key={cat.id} value={cat.name}>{cat.name}</option>)}
+                                </Select>
                             </div>
                             <div>
                                 <label htmlFor="location" className="block text-sm font-medium text-gray-700">Localização</label>
@@ -673,7 +702,10 @@ const StockList: React.FC<StockListProps> = ({ items, setItems, setActivePage, s
                             </div>
                             <div>
                                 <label htmlFor="unit" className="block text-sm font-medium text-gray-700">Unidade de Medida</label>
-                                <Input id="unit" name="unit" type="text" value={itemToEdit.unit || ''} onChange={handleEditInputChange} />
+                                 <Select id="unit" name="unit" value={itemToEdit.unit || ''} onChange={handleEditInputChange}>
+                                    <option value="">Selecione uma unidade</option>
+                                    {units.map(u => <option key={u.id} value={u.abbreviation}>{u.name} ({u.abbreviation})</option>)}
+                                </Select>
                             </div>
                             <div>
                                 <label htmlFor="minQuantity" className="block text-sm font-medium text-gray-700">Quantidade Mínima</label>

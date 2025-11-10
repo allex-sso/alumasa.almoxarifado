@@ -1,11 +1,13 @@
 import React, { useState, useMemo, useRef } from 'react';
 import Card from './ui/Card';
 import Button from './ui/Button';
-import { Item, EntryExitRecord } from '../types';
+import { Item, EntryExitRecord, Supplier } from '../types';
 import { PrintIcon, ExportIcon, WarningIcon, StockIcon, HistoryIcon } from './icons/Icons';
 import Input from './ui/Input';
 import Select from './ui/Select';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import Toast from './ui/Toast';
+import Modal from './ui/Modal';
 
 const getStartOfMonth = () => {
     const now = new Date();
@@ -19,6 +21,8 @@ const getToday = () => {
 interface ReportsProps {
   items: Item[];
   history: EntryExitRecord[];
+  addAuditLog: (action: string) => void;
+  suppliers: Supplier[];
 }
 
 type ReportTab = 'lowStock' | 'movement' | 'locationValue';
@@ -30,11 +34,14 @@ const TABS: { id: ReportTab; label: string; icon: React.ReactNode }[] = [
 ];
 
 
-const Reports: React.FC<ReportsProps> = ({ items, history }) => {
+const Reports: React.FC<ReportsProps> = ({ items, history, addAuditLog, suppliers }) => {
   const [startDate, setStartDate] = useState(getStartOfMonth());
   const [endDate, setEndDate] = useState(getToday());
   const [filterCategory, setFilterCategory] = useState('');
   const [activeTab, setActiveTab] = useState<ReportTab>('lowStock');
+  const [orderQuantities, setOrderQuantities] = useState<Record<string, string>>({});
+  const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'warning' } | null>(null);
   const reportPrintRef = useRef<HTMLDivElement>(null);
 
   const categories = useMemo(() => [...new Set(items.map(item => item.category))], [items]);
@@ -64,6 +71,99 @@ const Reports: React.FC<ReportsProps> = ({ items, history }) => {
 
     return { lowStockItems, movementHistory, valueByLocation };
   }, [items, history, filterCategory, startDate, endDate]);
+
+  const purchaseOrderItems = useMemo(() => {
+      return filteredReportData.lowStockItems
+          .map(item => ({
+              ...item,
+              orderQuantity: parseInt(orderQuantities[item.id] || '0', 10),
+          }))
+          .filter(item => item.orderQuantity > 0);
+  }, [filteredReportData.lowStockItems, orderQuantities]);
+
+  const handleOrderQuantityChange = (itemId: string, value: string) => {
+    if (/^\d*$/.test(value)) { // Allow only non-negative integers
+        setOrderQuantities(prev => ({ ...prev, [itemId]: value }));
+    }
+  };
+  
+  const handlePrintPurchaseOrder = () => {
+    const printContent = `
+        <html>
+        <head>
+            <title>Pedido de Compra - Alumasa</title>
+            <style>
+                @media print {
+                    body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+                }
+                body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; margin: 2rem; color: #333; }
+                .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #ccc; padding-bottom: 1rem; margin-bottom: 2rem; }
+                .header h1 { margin: 0; color: #002347; font-size: 2rem; }
+                .header .info { text-align: right; }
+                .header .info p { margin: 0; font-size: 0.9rem; color: #555; }
+                table { width: 100%; border-collapse: collapse; margin-top: 1.5rem; font-size: 0.9rem; }
+                th, td { border: 1px solid #ddd; padding: 0.75rem; text-align: left; }
+                th { background-color: #f4f4f4; font-weight: 600; }
+                tbody tr:nth-child(even) { background-color: #f9f9f9; }
+                .item-code { font-family: "Courier New", Courier, monospace; }
+                .quantity { text-align: right; font-weight: bold; }
+            </style>
+        </head>
+        <body>
+            <div class="header">
+                 <div>
+                    <h1>Alumasa</h1>
+                    <p>Pedido de Compra</p>
+                 </div>
+                 <div class="info">
+                    <p><strong>Data de Emissão:</strong></p>
+                    <p>${new Date().toLocaleDateString('pt-BR')}</p>
+                 </div>
+            </div>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Código</th>
+                        <th>Descrição</th>
+                        <th>Fornecedor</th>
+                        <th>Qtd. a Pedir</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${purchaseOrderItems.map(item => {
+                        const supplierName = suppliers.find(s => s.id === item.preferredSupplierId)?.name || 'N/A';
+                        return `
+                            <tr>
+                                <td class="item-code">${item.code}</td>
+                                <td>${item.description}</td>
+                                <td>${supplierName}</td>
+                                <td class="quantity">${item.orderQuantity}</td>
+                            </tr>
+                        `}).join('')}
+                </tbody>
+            </table>
+        </body>
+        </html>
+    `;
+    
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+        printWindow.document.write(printContent);
+        printWindow.document.close();
+        printWindow.onload = () => {
+            printWindow.focus();
+            printWindow.print();
+            printWindow.onafterprint = () => printWindow.close();
+        };
+    }
+
+    addAuditLog(`Gerou um pedido de compra para impressão com ${purchaseOrderItems.length} itens.`);
+    setToast({ message: 'Pedido de compra pronto para impressão!', type: 'success' });
+    setIsConfirmModalOpen(false);
+    setOrderQuantities({});
+};
+
+
 
   const handlePrintReport = () => {
     const printArea = reportPrintRef.current;
@@ -116,9 +216,9 @@ const Reports: React.FC<ReportsProps> = ({ items, history }) => {
 
     switch(activeTab) {
         case 'lowStock':
-            headers = ['Código', 'Descrição', 'Qtd. Atual', 'Qtd. Mínima', 'Categoria', 'Localização'];
+            headers = ['Código', 'Descrição', 'Qtd. Atual', 'Qtd. Mínima', 'Categoria', 'Localização', 'Qtd. a Pedir'];
             rows = filteredReportData.lowStockItems.map(item => [
-                item.code, item.description, item.stockQuantity, item.minQuantity, item.category, item.location
+                item.code, item.description, item.stockQuantity, item.minQuantity, item.category, item.location, orderQuantities[item.id] || 0
             ]);
             break;
         case 'movement':
@@ -185,6 +285,7 @@ const Reports: React.FC<ReportsProps> = ({ items, history }) => {
                       <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Descrição</th>
                       <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Qtd. Atual</th>
                       <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Qtd. Mínima</th>
+                      <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase no-print">Qtd. a Pedir</th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
@@ -194,10 +295,31 @@ const Reports: React.FC<ReportsProps> = ({ items, history }) => {
                         <td className="px-4 py-2 whitespace-nowrap text-sm">{item.description}</td>
                         <td className="px-4 py-2 whitespace-nowrap text-sm text-red-600 font-bold text-right">{item.stockQuantity}</td>
                         <td className="px-4 py-2 whitespace-nowrap text-sm text-right">{item.minQuantity}</td>
+                        <td className="px-4 py-2 whitespace-nowrap text-sm text-right no-print">
+                            <Input
+                                type="number"
+                                className="w-24 text-right"
+                                placeholder="0"
+                                value={orderQuantities[item.id] || ''}
+                                onChange={(e) => handleOrderQuantityChange(item.id, e.target.value)}
+                                min="0"
+                            />
+                        </td>
                       </tr>
-                    )) : <tr><td colSpan={4} className="text-center py-4 text-gray-500">Nenhum item com estoque baixo para os filtros selecionados.</td></tr>}
+                    )) : <tr><td colSpan={5} className="text-center py-4 text-gray-500">Nenhum item com estoque baixo para os filtros selecionados.</td></tr>}
                   </tbody>
                 </table>
+                 {lowStockItems.length > 0 && (
+                    <div className="flex justify-end mt-4 no-print">
+                        <Button
+                            onClick={() => setIsConfirmModalOpen(true)}
+                            disabled={purchaseOrderItems.length === 0}
+                        >
+                            <PrintIcon />
+                            Imprimir Pedido ({purchaseOrderItems.length})
+                        </Button>
+                    </div>
+                )}
               </div>
             );
         }
@@ -272,12 +394,11 @@ const Reports: React.FC<ReportsProps> = ({ items, history }) => {
                         <ResponsiveContainer>
                             <BarChart
                                 data={chartData}
-                                layout="vertical"
                                 margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
                             >
                                 <CartesianGrid strokeDasharray="3 3" />
-                                <XAxis type="number" tickFormatter={(value) => `R$ ${new Intl.NumberFormat('pt-BR').format(value as number)}`} />
-                                <YAxis type="category" dataKey="name" width={80} />
+                                <XAxis dataKey="name" />
+                                <YAxis tickFormatter={(value) => `R$ ${new Intl.NumberFormat('pt-BR').format(value as number)}`} />
                                 <Tooltip formatter={(value: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value)} />
                                 <Legend />
                                 <Bar dataKey="value" name="Valor em Estoque" fill="#002347" />
@@ -295,6 +416,7 @@ const Reports: React.FC<ReportsProps> = ({ items, history }) => {
 
   return (
     <div className="space-y-6">
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
       <h1 className="text-3xl font-bold text-gray-800">Relatórios</h1>
 
       <Card>
@@ -338,7 +460,7 @@ const Reports: React.FC<ReportsProps> = ({ items, history }) => {
             ))}
         </div>
         <div className="p-4 md:p-6">
-            <div className="flex justify-end flex-wrap gap-4 mb-4">
+            <div className="flex justify-end flex-wrap gap-4 mb-4 no-print">
                 <Button onClick={handleExportCsv} className="bg-green-600 hover:bg-green-700">
                     <ExportIcon />
                     Exportar para CSV
@@ -351,6 +473,40 @@ const Reports: React.FC<ReportsProps> = ({ items, history }) => {
             {renderReportContent()}
         </div>
       </Card>
+       <Modal isOpen={isConfirmModalOpen} onClose={() => setIsConfirmModalOpen(false)} title="Confirmar Impressão de Pedido">
+        <div className="space-y-4">
+            <p>
+                Você está prestes a gerar um pedido de compra para impressão com os seguintes itens:
+            </p>
+            <div className="max-h-60 overflow-y-auto border rounded-md p-2 bg-gray-50">
+                <ul className="divide-y">
+                    <li className="py-1 px-1 grid grid-cols-4 gap-2 font-bold text-xs text-gray-500">
+                        <span className="col-span-2">Item</span>
+                        <span className="text-right">Qtd. Atual</span>
+                        <span className="text-right">Qtd. a Pedir</span>
+                    </li>
+                    {purchaseOrderItems.map(item => (
+                        <li key={item.id} className="py-2 px-1 text-sm grid grid-cols-4 gap-2 items-center">
+                            <span className="col-span-2">{item.code} - {item.description}</span>
+                            <span className="font-mono text-right text-red-600">{item.stockQuantity}</span>
+                            <span className="font-mono text-right font-bold text-blue-600">{item.orderQuantity}</span>
+                        </li> 
+                    ))}
+                </ul>
+            </div>
+            <p className="text-sm font-medium">
+                Deseja continuar?
+            </p>
+            <div className="flex justify-end gap-4 pt-4">
+                <Button onClick={() => setIsConfirmModalOpen(false)} className="bg-gray-200 text-gray-800 hover:bg-gray-300">
+                    Cancelar
+                </Button>
+                <Button onClick={handlePrintPurchaseOrder} className="bg-blue-600 hover:bg-blue-700">
+                    Confirmar e Imprimir
+                </Button>
+            </div>
+        </div>
+      </Modal>
     </div>
   );
 };

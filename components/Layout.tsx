@@ -1,6 +1,8 @@
-import React, { useState, useRef, useEffect } from 'react';
+
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Page, User, Item } from '../types';
-import { DashboardIcon, StockIcon, ReportsIcon, LogoutIcon, MenuIcon, CloseIcon, UserIcon, CameraIcon, InventoryIcon, BackupIcon, SearchIcon, AuditIcon, MovementIcon, ControlIcon, ChevronRightIcon } from './icons/Icons';
+// FIX: Import missing EntryIcon and ExitIcon components.
+import { DashboardIcon, StockIcon, ReportsIcon, LogoutIcon, MenuIcon, CloseIcon, UserIcon, CameraIcon, InventoryIcon, BackupIcon, SearchIcon, AuditIcon, MovementIcon, ControlIcon, ChevronRightIcon, SupplierIcon, BellIcon, EntryIcon, ExitIcon } from './icons/Icons';
 import Modal from './ui/Modal';
 import Button from './ui/Button';
 import Input from './ui/Input';
@@ -15,6 +17,7 @@ interface LayoutProps {
   isPasswordChangeForced: boolean;
   items: Item[];
   onGlobalSearch: (searchTerm: string) => void;
+  onNavigateWithFilters: (filters: { category?: string, status?: string }) => void;
 }
 
 const NavLink: React.FC<{
@@ -39,7 +42,7 @@ const NavLink: React.FC<{
   </li>
 );
 
-const Layout: React.FC<LayoutProps> = ({ children, user, onLogout, activePage, setActivePage, onUpdateProfilePicture, isPasswordChangeForced, items, onGlobalSearch }) => {
+const Layout: React.FC<LayoutProps> = ({ children, user, onLogout, activePage, setActivePage, onUpdateProfilePicture, isPasswordChangeForced, items, onGlobalSearch, onNavigateWithFilters }) => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
@@ -49,6 +52,8 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogout, activePage, s
   const [searchResults, setSearchResults] = useState<Item[]>([]);
   const searchRef = useRef<HTMLDivElement>(null);
   const [openMenu, setOpenMenu] = useState<string | null>(null);
+
+  const lowStockCount = useMemo(() => items.filter(item => item.stockQuantity <= item.minQuantity).length, [items]);
 
   const navStructure = [
     {
@@ -85,6 +90,7 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogout, activePage, s
       role: ['Admin'],
       children: [
         { id: 'users', label: 'Usuários', page: 'users' as Page, role: ['Admin'] },
+        { id: 'suppliers', label: 'Fornecedores', page: 'suppliers' as Page, role: ['Admin'] },
         { id: 'backup', label: 'Backup & Restauração', page: 'backup' as Page, role: ['Admin'] },
       ],
     },
@@ -155,6 +161,7 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogout, activePage, s
     'new-exit': 'Nova Saída',
     reports: 'Relatórios',
     users: 'Gerenciamento de Usuários',
+    suppliers: 'Gerenciamento de Fornecedores',
     inventory: 'Inventário',
     backup: 'Backup e Restauração',
     audit: 'Log de Auditoria',
@@ -196,6 +203,10 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogout, activePage, s
     setSearchResults([]);
   };
 
+  const handleBellClick = () => {
+    onNavigateWithFilters({ status: 'low' });
+  };
+
   const sidebarContent = (
     <>
       <div className="flex flex-col items-center justify-center p-4 border-b border-blue-900 text-center">
@@ -207,7 +218,7 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogout, activePage, s
             {navStructure.map((group) => {
                 const userHasAccessToGroup = group.children
                     ? group.children.some(child => (!child.role || child.role.includes(user.role)))
-                    : group.role.includes(user.role);
+                    : (group.role && group.role.includes(user.role));
 
                 if (!userHasAccessToGroup) {
                     return null;
@@ -258,7 +269,7 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogout, activePage, s
                                     return (
                                         <li
                                             key={child.id}
-                                            className={`p-2 my-1 rounded-md text-sm transition-colors ${
+                                            className={`flex items-center p-2 my-1 rounded-md text-sm transition-colors ${
                                                 isPasswordChangeForced
                                                     ? 'text-gray-500 cursor-not-allowed'
                                                     : isChildActive
@@ -343,8 +354,24 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogout, activePage, s
             </div>
           </div>
           
-          <div className="flex items-center">
-            <span className="text-gray-600 mr-3 hidden lg:inline">Bem-vindo, {user.name}</span>
+          <div className="flex items-center space-x-4">
+            <div className="relative">
+              <button 
+                onClick={handleBellClick}
+                className="text-gray-600 hover:text-blue-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 rounded-full p-1"
+                aria-label="Notificações de estoque baixo"
+                disabled={isPasswordChangeForced}
+              >
+                  <BellIcon />
+              </button>
+              {lowStockCount > 0 && (
+                  <span className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-xs font-bold text-white pointer-events-none">
+                      {lowStockCount}
+                  </span>
+              )}
+            </div>
+
+            <span className="text-gray-600 hidden lg:inline">Bem-vindo, {user.name}</span>
             <button 
               onClick={() => setIsProfileModalOpen(true)}
               className="focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 rounded-full disabled:opacity-50 disabled:cursor-not-allowed"

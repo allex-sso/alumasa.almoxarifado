@@ -1,4 +1,4 @@
-export type Page = 'dashboard' | 'stock' | 'new-entry' | 'new-exit' | 'reports' | 'users' | 'inventory' | 'backup' | 'audit';
+export type Page = 'dashboard' | 'stock' | 'new-entry' | 'new-exit' | 'reports' | 'users' | 'inventory' | 'backup' | 'audit' | 'suppliers';
 
 export type Role = 'Admin' | 'Operator';
 
@@ -23,11 +23,15 @@ export interface Item {
   leadTimeDays: number;
   avgUnitValue: number;
   totalValue: number;
+  preferredSupplierId?: string;
 }
 
 export interface Supplier {
   id: string;
   name: string;
+  contactPerson?: string;
+  email?: string;
+  phone?: string;
 }
 
 export interface Category {
@@ -40,12 +44,19 @@ export interface Location {
     name: string;
 }
 
+export interface UnitOfMeasurement {
+  id: string;
+  name: string;
+  abbreviation: string;
+}
+
 export interface EntryExitRecord {
   id: string;
   itemId: string;
   type: 'entry' | 'exit';
   quantity: number;
   date: string; // ISO string format 'YYYY-MM-DD'
+  supplierId?: string;
 }
 
 export interface AuditLog {

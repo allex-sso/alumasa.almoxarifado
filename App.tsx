@@ -11,8 +11,9 @@ import ChangePasswordModal from './components/ChangePasswordModal';
 import Inventory from './components/Inventory';
 import BackupRestore from './components/BackupRestore';
 import AuditLog from './components/AuditLog';
-import { Page, Item, User, EntryExitRecord, AuditLog as AuditLogType } from './types';
-import { mockUsers, mockItems, mockEntryExitHistory, mockAuditLogs } from './data/mock';
+import SupplierManagement from './components/SupplierManagement';
+import { Page, Item, User, EntryExitRecord, AuditLog as AuditLogType, Supplier, Category, UnitOfMeasurement } from './types';
+import { mockUsers, mockItems, mockEntryExitHistory, mockAuditLogs, mockSuppliers, mockCategories, mockUnits } from './data/mock';
 
 const App: React.FC = () => {
   const [authenticatedUser, setAuthenticatedUser] = useState<User | null>(null);
@@ -21,10 +22,15 @@ const App: React.FC = () => {
   const [itemForExit, setItemForExit] = useState<Item | null>(null);
   const [users, setUsers] = useState<User[]>(mockUsers);
   const [items, setItems] = useState<Item[]>(mockItems);
+  const [suppliers, setSuppliers] = useState<Supplier[]>(mockSuppliers);
+  const [categories, setCategories] = useState<Category[]>(mockCategories);
+  const [units, setUnits] = useState<UnitOfMeasurement[]>(mockUnits);
   const [entryExitHistory, setEntryExitHistory] = useState<EntryExitRecord[]>(mockEntryExitHistory);
   const [auditLogs, setAuditLogs] = useState<AuditLogType[]>(mockAuditLogs);
   const [changePasswordUser, setChangePasswordUser] = useState<User | null>(null);
   const [initialStockSearch, setInitialStockSearch] = useState<string>('');
+  const [initialStockFilters, setInitialStockFilters] = useState<{ category?: string; status?: string }>({});
+
   
   const addAuditLog = (action: string, userOverride?: User) => {
     const user = userOverride || authenticatedUser;
@@ -95,24 +101,32 @@ const App: React.FC = () => {
     setInitialStockSearch(term);
     setCurrentPage('stock');
   };
+  
+  const handleNavigateWithFilters = (filters: { category?: string; status?: string }) => {
+    setInitialStockFilters(filters);
+    setCurrentPage('stock');
+  };
 
 
   const renderPage = useCallback(() => {
     if (!authenticatedUser) return null;
 
     // Enforce admin-only pages
-    const adminPages: Page[] = ['users', 'inventory', 'audit', 'backup'];
+    const adminPages: Page[] = ['users', 'suppliers', 'inventory', 'audit', 'backup'];
     if (adminPages.includes(currentPage) && authenticatedUser.role !== 'Admin') {
         // Redirect non-admins trying to access admin pages to the dashboard
-        return <Dashboard items={items} history={entryExitHistory} setCurrentPage={setCurrentPage} />;
+        return <Dashboard items={items} history={entryExitHistory} setCurrentPage={setCurrentPage} setInitialStockFilters={setInitialStockFilters} />;
     }
 
     switch (currentPage) {
       case 'dashboard':
-        return <Dashboard items={items} history={entryExitHistory} setCurrentPage={setCurrentPage} />;
+        return <Dashboard items={items} history={entryExitHistory} setCurrentPage={setCurrentPage} setInitialStockFilters={setInitialStockFilters} />;
       case 'stock':
         return <StockList 
-                    items={items} 
+                    items={items}
+                    suppliers={suppliers}
+                    categories={categories}
+                    units={units}
                     setItems={setItems} 
                     setActivePage={setCurrentPage} 
                     setItemForEntry={setItemForEntry} 
@@ -120,14 +134,16 @@ const App: React.FC = () => {
                     history={entryExitHistory} 
                     initialSearchTerm={initialStockSearch}
                     clearInitialSearch={() => setInitialStockSearch('')}
+                    initialFilters={initialStockFilters}
+                    clearInitialFilters={() => setInitialStockFilters({})}
                     addAuditLog={addAuditLog}
                 />;
       case 'new-entry':
-        return <NewEntry items={items} setItems={setItems} itemForEntry={itemForEntry} clearItemForEntry={() => setItemForEntry(null)} addAuditLog={addAuditLog} />;
+        return <NewEntry items={items} setItems={setItems} itemForEntry={itemForEntry} clearItemForEntry={() => setItemForEntry(null)} addAuditLog={addAuditLog} suppliers={suppliers} />;
       case 'new-exit':
         return <NewExit items={items} setItems={setItems} itemForExit={itemForExit} clearItemForExit={() => setItemForExit(null)} addAuditLog={addAuditLog} />;
       case 'reports':
-        return <Reports items={items} history={entryExitHistory} />;
+        return <Reports items={items} history={entryExitHistory} addAuditLog={addAuditLog} suppliers={suppliers} />;
       case 'users':
         return <UserManagement 
                     users={users} 
@@ -135,6 +151,8 @@ const App: React.FC = () => {
                     onChangePassword={onRequestChangePasswordForUser}
                     addAuditLog={addAuditLog}
                 />;
+      case 'suppliers':
+          return <SupplierManagement suppliers={suppliers} setSuppliers={setSuppliers} addAuditLog={addAuditLog} />;
       case 'inventory':
           return <Inventory items={items} setItems={setItems} addAuditLog={addAuditLog} />;
       case 'audit':
@@ -150,9 +168,9 @@ const App: React.FC = () => {
                     addAuditLog={addAuditLog}
                   />;
       default:
-        return <Dashboard items={items} history={entryExitHistory} setCurrentPage={setCurrentPage} />;
+        return <Dashboard items={items} history={entryExitHistory} setCurrentPage={setCurrentPage} setInitialStockFilters={setInitialStockFilters} />;
     }
-  }, [currentPage, itemForEntry, itemForExit, authenticatedUser, users, items, entryExitHistory, auditLogs, initialStockSearch]);
+  }, [currentPage, itemForEntry, itemForExit, authenticatedUser, users, items, suppliers, categories, units, entryExitHistory, auditLogs, initialStockSearch, initialStockFilters]);
 
   if (!authenticatedUser && !changePasswordUser) {
     return <Login onLogin={handleLogin} users={users} />;
@@ -180,6 +198,7 @@ const App: React.FC = () => {
         isPasswordChangeForced={!!changePasswordUser && changePasswordUser.password === 'changeme'}
         items={items}
         onGlobalSearch={handleGlobalSearch}
+        onNavigateWithFilters={handleNavigateWithFilters}
       >
         {renderPage()}
       </Layout>

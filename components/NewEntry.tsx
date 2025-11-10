@@ -3,8 +3,9 @@ import Card from './ui/Card';
 import Input from './ui/Input';
 import Button from './ui/Button';
 import Textarea from './ui/Textarea';
-import { Item } from '../types';
+import { Item, Supplier } from '../types';
 import Toast from './ui/Toast';
+import Select from './ui/Select';
 
 interface NewEntryProps {
     items: Item[];
@@ -12,14 +13,15 @@ interface NewEntryProps {
     itemForEntry: Item | null;
     clearItemForEntry: () => void;
     addAuditLog: (action: string) => void;
+    suppliers: Supplier[];
 }
 
-const NewEntry: React.FC<NewEntryProps> = ({ items, setItems, itemForEntry, clearItemForEntry, addAuditLog }) => {
+const NewEntry: React.FC<NewEntryProps> = ({ items, setItems, itemForEntry, clearItemForEntry, addAuditLog, suppliers }) => {
     const [isPreFilled] = useState(!!itemForEntry);
     const [code, setCode] = useState(itemForEntry?.code || '');
     const [description, setDescription] = useState(itemForEntry?.description || '');
     const [quantity, setQuantity] = useState('');
-    const [supplier, setSupplier] = useState('');
+    const [supplierId, setSupplierId] = useState(itemForEntry?.preferredSupplierId || '');
     const [invoice, setInvoice] = useState('');
     const [observations, setObservations] = useState('');
     const [isLoading, setIsLoading] = useState(false);
@@ -54,6 +56,7 @@ const NewEntry: React.FC<NewEntryProps> = ({ items, setItems, itemForEntry, clea
 
         if (foundItem) {
             setDescription(foundItem.description);
+            setSupplierId(foundItem.preferredSupplierId || '');
             setCodeError(null);
             setIsItemLocked(true);
             quantityInputRef.current?.focus(); // Move focus on success
@@ -111,7 +114,7 @@ const NewEntry: React.FC<NewEntryProps> = ({ items, setItems, itemForEntry, clea
             setStatus({type: 'error', text: 'A quantidade deve ser maior que zero.'});
             return;
         }
-        if (!supplier.trim()) {
+        if (!supplierId.trim()) {
             setStatus({type: 'error', text: 'O campo "Fornecedor" é obrigatório.'});
             return;
         }
@@ -151,7 +154,7 @@ const NewEntry: React.FC<NewEntryProps> = ({ items, setItems, itemForEntry, clea
         
         // Reset form for the next entry
         setQuantity('');
-        setSupplier('');
+        setSupplierId('');
         setInvoice('');
         setObservations('');
         setCode('');
@@ -213,8 +216,13 @@ const NewEntry: React.FC<NewEntryProps> = ({ items, setItems, itemForEntry, clea
                             />
                         </div>
                         <div>
-                            <label htmlFor="supplier" className="block text-sm font-medium text-gray-700 mb-1">Fornecedor</label>
-                            <Input id="supplier" type="text" value={supplier} onChange={e => setSupplier(e.target.value)} placeholder="e.g., Parafusos & Cia" required />
+                            <label htmlFor="supplierId" className="block text-sm font-medium text-gray-700 mb-1">Fornecedor</label>
+                             <Select id="supplierId" value={supplierId} onChange={e => setSupplierId(e.target.value)} required>
+                                <option value="">Selecione um fornecedor</option>
+                                {suppliers.map(s => (
+                                    <option key={s.id} value={s.id}>{s.name}</option>
+                                ))}
+                            </Select>
                         </div>
                         <div>
                             <label htmlFor="invoice" className="block text-sm font-medium text-gray-700 mb-1">Nota Fiscal</label>

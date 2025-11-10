@@ -31,9 +31,10 @@ interface DashboardProps {
     items: Item[];
     history: EntryExitRecord[];
     setCurrentPage: (page: Page) => void;
+    setInitialStockFilters: (filters: { category: string }) => void;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ items, history, setCurrentPage }) => {
+const Dashboard: React.FC<DashboardProps> = ({ items, history, setCurrentPage, setInitialStockFilters }) => {
     const [startDate, setStartDate] = useState(getStartOfMonth());
     const [endDate, setEndDate] = useState(getToday());
     const [filterCategory, setFilterCategory] = useState('');
@@ -69,6 +70,13 @@ const Dashboard: React.FC<DashboardProps> = ({ items, history, setCurrentPage })
 
         return { totalValue, lowStockCount, totalItems, entries, exits, categoryChartData };
     }, [filterCategory, startDate, endDate, items, history]);
+
+    const handleCategoryClick = (data: any) => {
+        if (data && data.name) {
+            setInitialStockFilters({ category: data.name });
+            setCurrentPage('stock');
+        }
+    };
 
     return (
         <div className="space-y-6">
@@ -186,6 +194,8 @@ const Dashboard: React.FC<DashboardProps> = ({ items, history, setCurrentPage })
                                     dataKey="value"
                                     nameKey="name"
                                     label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                                    onClick={handleCategoryClick}
+                                    className="cursor-pointer"
                                 >
                                     {filteredDashboardData.categoryChartData.map((entry, index) => (
                                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
