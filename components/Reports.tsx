@@ -39,7 +39,7 @@ const Reports: React.FC<ReportsProps> = ({ items, history, addAuditLog, supplier
   const [endDate, setEndDate] = useState(getToday());
   const [filterCategory, setFilterCategory] = useState('');
   const [activeTab, setActiveTab] = useState<ReportTab>('lowStock');
-  const [orderQuantities, setOrderQuantities] = useState<Record<string, string>>({});
+  const [orderDescriptions, setOrderDescriptions] = useState<Record<string, string>>({});
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'warning' } | null>(null);
   const reportPrintRef = useRef<HTMLDivElement>(null);
@@ -76,15 +76,13 @@ const Reports: React.FC<ReportsProps> = ({ items, history, addAuditLog, supplier
       return filteredReportData.lowStockItems
           .map(item => ({
               ...item,
-              orderQuantity: parseInt(orderQuantities[item.id] || '0', 10),
+              orderDescription: orderDescriptions[item.id] || '',
           }))
-          .filter(item => item.orderQuantity > 0);
-  }, [filteredReportData.lowStockItems, orderQuantities]);
+          .filter(item => item.orderDescription.trim() !== '');
+  }, [filteredReportData.lowStockItems, orderDescriptions]);
 
-  const handleOrderQuantityChange = (itemId: string, value: string) => {
-    if (/^\d*$/.test(value)) { // Allow only non-negative integers
-        setOrderQuantities(prev => ({ ...prev, [itemId]: value }));
-    }
+  const handleOrderDescriptionChange = (itemId: string, value: string) => {
+    setOrderDescriptions(prev => ({ ...prev, [itemId]: value }));
   };
   
   const handlePrintPurchaseOrder = () => {
@@ -106,7 +104,6 @@ const Reports: React.FC<ReportsProps> = ({ items, history, addAuditLog, supplier
                 th { background-color: #f4f4f4; font-weight: 600; }
                 tbody tr:nth-child(even) { background-color: #f9f9f9; }
                 .item-code { font-family: "Courier New", Courier, monospace; }
-                .quantity { text-align: right; font-weight: bold; }
             </style>
         </head>
         <body>
@@ -124,9 +121,9 @@ const Reports: React.FC<ReportsProps> = ({ items, history, addAuditLog, supplier
                 <thead>
                     <tr>
                         <th>Código</th>
-                        <th>Descrição</th>
+                        <th>Descrição Item</th>
                         <th>Fornecedor</th>
-                        <th>Qtd. a Pedir</th>
+                        <th>Descrição do Pedido</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -137,7 +134,7 @@ const Reports: React.FC<ReportsProps> = ({ items, history, addAuditLog, supplier
                                 <td class="item-code">${item.code}</td>
                                 <td>${item.description}</td>
                                 <td>${supplierName}</td>
-                                <td class="quantity">${item.orderQuantity}</td>
+                                <td>${item.orderDescription}</td>
                             </tr>
                         `}).join('')}
                 </tbody>
@@ -160,7 +157,7 @@ const Reports: React.FC<ReportsProps> = ({ items, history, addAuditLog, supplier
     addAuditLog(`Gerou um pedido de compra para impressão com ${purchaseOrderItems.length} itens.`);
     setToast({ message: 'Pedido de compra pronto para impressão!', type: 'success' });
     setIsConfirmModalOpen(false);
-    setOrderQuantities({});
+    setOrderDescriptions({});
 };
 
 
@@ -216,9 +213,9 @@ const Reports: React.FC<ReportsProps> = ({ items, history, addAuditLog, supplier
 
     switch(activeTab) {
         case 'lowStock':
-            headers = ['Código', 'Descrição', 'Qtd. Atual', 'Qtd. Mínima', 'Categoria', 'Localização', 'Qtd. a Pedir'];
+            headers = ['Código', 'Descrição', 'Qtd. Atual', 'Qtd. Mínima', 'Categoria', 'Localização', 'Descrição do Pedido'];
             rows = filteredReportData.lowStockItems.map(item => [
-                item.code, item.description, item.stockQuantity, item.minQuantity, item.category, item.location, orderQuantities[item.id] || 0
+                item.code, item.description, item.stockQuantity, item.minQuantity, item.category, item.location, orderDescriptions[item.id] || ''
             ]);
             break;
         case 'movement':
@@ -285,7 +282,7 @@ const Reports: React.FC<ReportsProps> = ({ items, history, addAuditLog, supplier
                       <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Descrição</th>
                       <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Qtd. Atual</th>
                       <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Qtd. Mínima</th>
-                      <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase no-print">Qtd. a Pedir</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase no-print">Descrição do Pedido</th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
@@ -297,12 +294,11 @@ const Reports: React.FC<ReportsProps> = ({ items, history, addAuditLog, supplier
                         <td className="px-4 py-2 whitespace-nowrap text-sm text-right">{item.minQuantity}</td>
                         <td className="px-4 py-2 whitespace-nowrap text-sm text-right no-print">
                             <Input
-                                type="number"
-                                className="w-24 text-right"
-                                placeholder="0"
-                                value={orderQuantities[item.id] || ''}
-                                onChange={(e) => handleOrderQuantityChange(item.id, e.target.value)}
-                                min="0"
+                                type="text"
+                                className="w-full"
+                                placeholder="Ex: Pedir 100 UN com urgência"
+                                value={orderDescriptions[item.id] || ''}
+                                onChange={(e) => handleOrderDescriptionChange(item.id, e.target.value)}
                             />
                         </td>
                       </tr>
@@ -461,14 +457,18 @@ const Reports: React.FC<ReportsProps> = ({ items, history, addAuditLog, supplier
         </div>
         <div className="p-4 md:p-6">
             <div className="flex justify-end flex-wrap gap-4 mb-4 no-print">
-                <Button onClick={handleExportCsv} className="bg-green-600 hover:bg-green-700">
-                    <ExportIcon />
-                    Exportar para CSV
-                </Button>
-                <Button onClick={handlePrintReport}>
-                    <PrintIcon />
-                    Imprimir Relatório
-                </Button>
+                {activeTab !== 'lowStock' && (
+                    <>
+                        <Button onClick={handleExportCsv} className="bg-green-600 hover:bg-green-700">
+                            <ExportIcon />
+                            Exportar para CSV
+                        </Button>
+                        <Button onClick={handlePrintReport}>
+                            <PrintIcon />
+                            Imprimir Relatório
+                        </Button>
+                    </>
+                )}
             </div>
             {renderReportContent()}
         </div>
@@ -483,13 +483,13 @@ const Reports: React.FC<ReportsProps> = ({ items, history, addAuditLog, supplier
                     <li className="py-1 px-1 grid grid-cols-4 gap-2 font-bold text-xs text-gray-500">
                         <span className="col-span-2">Item</span>
                         <span className="text-right">Qtd. Atual</span>
-                        <span className="text-right">Qtd. a Pedir</span>
+                        <span className="text-left">Descrição do Pedido</span>
                     </li>
                     {purchaseOrderItems.map(item => (
                         <li key={item.id} className="py-2 px-1 text-sm grid grid-cols-4 gap-2 items-center">
                             <span className="col-span-2">{item.code} - {item.description}</span>
                             <span className="font-mono text-right text-red-600">{item.stockQuantity}</span>
-                            <span className="font-mono text-right font-bold text-blue-600">{item.orderQuantity}</span>
+                            <span className="text-left font-medium text-blue-600">{item.orderDescription}</span>
                         </li> 
                     ))}
                 </ul>

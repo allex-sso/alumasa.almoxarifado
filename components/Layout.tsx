@@ -2,10 +2,11 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Page, User, Item } from '../types';
 // FIX: Import missing EntryIcon and ExitIcon components.
-import { DashboardIcon, StockIcon, ReportsIcon, LogoutIcon, MenuIcon, CloseIcon, UserIcon, CameraIcon, InventoryIcon, BackupIcon, SearchIcon, AuditIcon, MovementIcon, ControlIcon, ChevronRightIcon, SupplierIcon, BellIcon, EntryIcon, ExitIcon } from './icons/Icons';
+import { DashboardIcon, StockIcon, ReportsIcon, LogoutIcon, MenuIcon, CloseIcon, UserIcon, CameraIcon, InventoryIcon, BackupIcon, SearchIcon, AuditIcon, MovementIcon, ControlIcon, ChevronRightIcon, SupplierIcon, BellIcon, EntryIcon, ExitIcon, ChatIcon } from './icons/Icons';
 import Modal from './ui/Modal';
 import Button from './ui/Button';
 import Input from './ui/Input';
+import Chat from './Chat';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -52,6 +53,7 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogout, activePage, s
   const [searchResults, setSearchResults] = useState<Item[]>([]);
   const searchRef = useRef<HTMLDivElement>(null);
   const [openMenu, setOpenMenu] = useState<string | null>(null);
+  const [isChatOpen, setIsChatOpen] = useState(false);
 
   const lowStockCount = useMemo(() => items.filter(item => item.stockQuantity <= item.minQuantity).length, [items]);
 
@@ -390,6 +392,21 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogout, activePage, s
           {children}
         </main>
       </div>
+
+        {/* Chat Widget */}
+        {!isPasswordChangeForced && (
+            <>
+                <button
+                    onClick={() => setIsChatOpen(!isChatOpen)}
+                    className="fixed bottom-5 right-5 z-40 bg-blue-600 text-white w-14 h-14 rounded-full flex items-center justify-center shadow-lg hover:bg-blue-700 transition-transform transform hover:scale-110 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                    aria-label={isChatOpen ? "Fechar assistente" : "Abrir assistente"}
+                >
+                    {isChatOpen ? <CloseIcon /> : <ChatIcon />}
+                </button>
+                <Chat isOpen={isChatOpen} onClose={() => setIsChatOpen(false)} />
+            </>
+        )}
+
        <Modal isOpen={isProfileModalOpen} onClose={handleCloseProfileModal} title="Editar Foto do Perfil">
           <div className="flex flex-col items-center space-y-4">
             <div className="relative group">

@@ -3,7 +3,7 @@ import { Item, Page, EntryExitRecord, Supplier, Category, UnitOfMeasurement } fr
 import Card from './ui/Card';
 import Input from './ui/Input';
 import Select from './ui/Select';
-import { TrashIcon, EntryIcon, HistoryIcon, ExportIcon, EditIcon, ExitIcon, PlusIcon, QrCodeIcon, PrintIcon } from './icons/Icons';
+import { TrashIcon, EntryIcon, HistoryIcon, ExportIcon, EditIcon, ExitIcon, PlusIcon, QrCodeIcon, PrintIcon, UploadIcon } from './icons/Icons';
 import Button from './ui/Button';
 import Modal from './ui/Modal';
 import Toast from './ui/Toast';
@@ -44,6 +44,11 @@ const StockList: React.FC<StockListProps> = ({ items, suppliers, categories, uni
     const [isPreviewLoading, setIsPreviewLoading] = useState(false);
     const [previewError, setPreviewError] = useState(false);
     const [isFiltering, setIsFiltering] = useState(false);
+
+    // Bulk add states
+    const [modalTab, setModalTab] = useState<'form' | 'bulk'>('form');
+    const [parsedData, setParsedData] = useState<{ validItems: Partial<Item>[]; errors: string[] } | null>(null);
+    const bulkFileInputRef = useRef<HTMLInputElement>(null);
     
     // Pagination state
     const [currentPage, setCurrentPage] = useState(1);
@@ -169,6 +174,7 @@ const StockList: React.FC<StockListProps> = ({ items, suppliers, categories, uni
     // Pagination calculations
     const paginatedItems = useMemo(() => {
         const startIndex = (currentPage - 1) * itemsPerPage;
+        // FIX: The slice method should have 2 arguments, not 3.
         return filteredItems.slice(startIndex, startIndex + itemsPerPage);
     }, [filteredItems, currentPage, itemsPerPage]);
 
@@ -234,13 +240,17 @@ const StockList: React.FC<StockListProps> = ({ items, suppliers, categories, uni
             avgUnitValue: 0,
             totalValue: 0,
             preferredSupplierId: '',
+            equipment: '',
         });
+        setModalTab('form');
+        setParsedData(null);
         setIsEditModalOpen(true);
     };
 
     const closeEditModal = () => {
         setItemToEdit(null);
         setIsEditModalOpen(false);
+        setParsedData(null);
     };
     
     const handleEditInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
@@ -313,6 +323,94 @@ const StockList: React.FC<StockListProps> = ({ items, suppliers, categories, uni
             setToast({ message: 'Item criado com sucesso!', type: 'success' });
         }
         
+        closeEditModal();
+    };
+
+    const handleFileParse = (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const text = e.target?.result as string;
+            const lines = text.split(/\r\n|\n/).filter(line => line.trim() !== '');
+            if (lines.length < 2) {
+                setParsedData({ validItems: [], errors: ["Arquivo vazio ou sem dados."] });
+                return;
+            }
+
+            const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+            const expectedHeaders = ['code', 'description', 'category', 'location', 'unit', 'stockquantity', 'minquantity', 'equipment'];
+            const missingHeaders = expectedHeaders.filter(h => !headers.includes(h) && !h.endsWith('(opcional)'));
+            
+            // Allow stockquantity and minquantity to be missing for bulk creation.
+            const requiredHeaders = ['code', 'description', 'category', 'location', 'unit'];
+            const actuallyMissing = requiredHeaders.filter(h => !headers.includes(h));
+
+            if (actuallyMissing.length > 0) {
+                 setParsedData({ validItems: [], errors: [`Cabeçalhos obrigatórios ausentes no CSV: ${actuallyMissing.join(', ')}`] });
+                 return;
+            }
+
+            const validItems: Partial<Item>[] = [];
+            const errors: string[] = [];
+            const existingCodes = new Set(items.map(i => i.code.toLowerCase()));
+
+            for (let i = 1; i < lines.length; i++) {
+                const values = lines[i].split(',');
+                const rowData: { [key: string]: string } = {};
+                 headers.forEach((header, index) => {
+                    rowData[header.replace(/\s*\(opcional\)/, '')] = values[index]?.trim() ?? '';
+                });
+
+                const { code, description, category, location, unit, stockquantity, minquantity, equipment } = rowData;
+
+                if (!code || !description || !category || !location || !unit) {
+                    errors.push(`Linha ${i + 1}: Dados obrigatórios (código, descrição, categoria, local, unidade) faltando.`);
+                    continue;
+                }
+
+                if (existingCodes.has(code.toLowerCase()) || validItems.some(item => item.code?.toLowerCase() === code.toLowerCase())) {
+                    errors.push(`Linha ${i + 1}: Código "${code}" já existe no sistema ou no arquivo.`);
+                    continue;
+                }
+                
+                const stockQuantityNum = stockquantity ? parseFloat(stockquantity) : 0;
+                const minQuantityNum = minquantity ? parseFloat(minquantity) : 0;
+
+                if (isNaN(stockQuantityNum) || isNaN(minQuantityNum)) {
+                     errors.push(`Linha ${i + 1}: Quantidade em estoque ou mínima ("${stockquantity}", "${minquantity}") não é um número válido.`);
+                    continue;
+                }
+
+                validItems.push({
+                    code, description, category, location, unit,
+                    stockQuantity: stockQuantityNum,
+                    minQuantity: minQuantityNum,
+                    equipment: equipment || '',
+                    avgUnitValue: 0, // Default value
+                    leadTimeDays: 0, // Default value
+                });
+            }
+            setParsedData({ validItems, errors });
+        };
+        reader.readAsText(file);
+    };
+    
+    const handleConfirmBulkImport = () => {
+        if (!parsedData || parsedData.validItems.length === 0) return;
+
+        const newItems: Item[] = parsedData.validItems.map((item, index) => ({
+            ...item,
+            id: `item-${Date.now()}-${index}`,
+            totalValue: (item.stockQuantity || 0) * (item.avgUnitValue || 0),
+        } as Item));
+
+        setItems(prev => [...prev, ...newItems]);
+        
+        addAuditLog(`Importou em lote ${newItems.length} novos itens via CSV.`);
+
+        setToast({ message: `${newItems.length} itens importados com sucesso!`, type: 'success' });
         closeEditModal();
     };
 
@@ -664,72 +762,145 @@ const StockList: React.FC<StockListProps> = ({ items, suppliers, categories, uni
 
             <Modal isOpen={isEditModalOpen} onClose={closeEditModal} title={isCreating ? 'Novo Item' : 'Editar Item'}>
                 {itemToEdit && (
-                    <div className="space-y-4">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div>
-                                <label htmlFor="code" className="block text-sm font-medium text-gray-700">Código</label>
-                                <Input id="code" name="code" type="text" value={itemToEdit.code || ''} onChange={handleEditInputChange} readOnly={!isCreating} className={!isCreating ? 'bg-gray-100' : ''} />
-                            </div>
-                             <div>
-                                <label htmlFor="preferredSupplierId" className="block text-sm font-medium text-gray-700">Fornecedor Preferencial</label>
-                                <Select id="preferredSupplierId" name="preferredSupplierId" value={itemToEdit.preferredSupplierId || ''} onChange={handleEditInputChange}>
-                                    <option value="">Nenhum (Padrão)</option>
-                                    {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                                </Select>
-                            </div>
-                            <div className="md:col-span-2">
-                                <label htmlFor="description" className="block text-sm font-medium text-gray-700">Descrição</label>
-                                <Input id="description" name="description" type="text" value={itemToEdit.description || ''} onChange={handleEditInputChange} />
-                            </div>
-                            <div>
-                                <label htmlFor="category" className="block text-sm font-medium text-gray-700">Categoria</label>
-                                <Select id="category" name="category" value={itemToEdit.category || ''} onChange={handleEditInputChange}>
-                                    <option value="">Selecione uma categoria</option>
-                                    {categories.map(cat => <option key={cat.id} value={cat.name}>{cat.name}</option>)}
-                                </Select>
-                            </div>
-                            <div>
-                                <label htmlFor="location" className="block text-sm font-medium text-gray-700">Localização</label>
-                                <Input id="location" name="location" type="text" value={itemToEdit.location || ''} onChange={handleEditInputChange} />
-                            </div>
-                            <div>
-                                <label htmlFor="unit" className="block text-sm font-medium text-gray-700">Unidade de Medida</label>
-                                 <Select id="unit" name="unit" value={itemToEdit.unit || ''} onChange={handleEditInputChange}>
-                                    <option value="">Selecione uma unidade</option>
-                                    {units.map(u => <option key={u.id} value={u.abbreviation}>{u.name} ({u.abbreviation})</option>)}
-                                </Select>
-                            </div>
-                            <div>
-                                <label htmlFor="minQuantity" className="block text-sm font-medium text-gray-700">Quantidade Mínima</label>
-                                <Input id="minQuantity" name="minQuantity" type="number" value={itemToEdit.minQuantity || 0} onChange={handleEditInputChange} />
-                            </div>
-                             {isCreating && (
-                                <>
-                                <div>
-                                    <label htmlFor="stockQuantity" className="block text-sm font-medium text-gray-700">Quantidade Inicial</label>
-                                    <Input id="stockQuantity" name="stockQuantity" type="number" value={itemToEdit.stockQuantity || 0} onChange={handleEditInputChange} />
-                                </div>
-                                <div>
-                                    <label htmlFor="avgUnitValue" className="block text-sm font-medium text-gray-700">Valor Médio Unitário</label>
-                                    <Input id="avgUnitValue" name="avgUnitValue" type="number" value={itemToEdit.avgUnitValue || 0} onChange={handleEditInputChange} />
-                                </div>
-                                </>
-                            )}
-                        </div>
-                        {!isCreating && (
-                             <div className="pt-2">
-                                <p className="text-xs text-gray-500">A quantidade em estoque e o valor são atualizados automaticamente através das entradas, saídas e inventário.</p>
+                    <>
+                        {isCreating && (
+                            <div className="border-b border-gray-200 mb-4">
+                                <nav className="-mb-px flex space-x-6" aria-label="Tabs">
+                                    <button
+                                        onClick={() => setModalTab('form')}
+                                        className={`whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm ${modalTab === 'form' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+                                    >
+                                        Adicionar Manualmente
+                                    </button>
+                                    <button
+                                        onClick={() => setModalTab('bulk')}
+                                        className={`whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm ${modalTab === 'bulk' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+                                    >
+                                        Adicionar em Lote (CSV)
+                                    </button>
+                                </nav>
                             </div>
                         )}
+
+                        {modalTab === 'form' && (
+                            <div className="space-y-4">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                        <label htmlFor="code" className="block text-sm font-medium text-gray-700">Código</label>
+                                        <Input id="code" name="code" type="text" value={itemToEdit.code || ''} onChange={handleEditInputChange} readOnly={!isCreating} className={!isCreating ? 'bg-gray-100' : ''} />
+                                    </div>
+                                    <div>
+                                        <label htmlFor="preferredSupplierId" className="block text-sm font-medium text-gray-700">Fornecedor Preferencial</label>
+                                        <Select id="preferredSupplierId" name="preferredSupplierId" value={itemToEdit.preferredSupplierId || ''} onChange={handleEditInputChange}>
+                                            <option value="">Nenhum (Padrão)</option>
+                                            {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                                        </Select>
+                                    </div>
+                                    <div className="md:col-span-2">
+                                        <label htmlFor="description" className="block text-sm font-medium text-gray-700">Descrição</label>
+                                        <Input id="description" name="description" type="text" value={itemToEdit.description || ''} onChange={handleEditInputChange} />
+                                    </div>
+                                    <div>
+                                        <label htmlFor="category" className="block text-sm font-medium text-gray-700">Categoria</label>
+                                        <Select id="category" name="category" value={itemToEdit.category || ''} onChange={handleEditInputChange}>
+                                            <option value="">Selecione uma categoria</option>
+                                            {categories.map(cat => <option key={cat.id} value={cat.name}>{cat.name}</option>)}
+                                        </Select>
+                                    </div>
+                                    <div>
+                                        <label htmlFor="location" className="block text-sm font-medium text-gray-700">Localização</label>
+                                        <Input id="location" name="location" type="text" value={itemToEdit.location || ''} onChange={handleEditInputChange} />
+                                    </div>
+                                    <div>
+                                        <label htmlFor="unit" className="block text-sm font-medium text-gray-700">Unidade de Medida</label>
+                                        <Select id="unit" name="unit" value={itemToEdit.unit || ''} onChange={handleEditInputChange}>
+                                            <option value="">Selecione uma unidade</option>
+                                            {units.map(u => <option key={u.id} value={u.abbreviation}>{u.name} ({u.abbreviation})</option>)}
+                                        </Select>
+                                    </div>
+                                     <div>
+                                        <label htmlFor="equipment" className="block text-sm font-medium text-gray-700">Equipamento (Opcional)</label>
+                                        <Input id="equipment" name="equipment" type="text" value={itemToEdit.equipment || ''} onChange={handleEditInputChange} />
+                                    </div>
+                                    <div>
+                                        <label htmlFor="minQuantity" className="block text-sm font-medium text-gray-700">Quantidade Mínima</label>
+                                        <Input id="minQuantity" name="minQuantity" type="number" value={itemToEdit.minQuantity || 0} onChange={handleEditInputChange} />
+                                    </div>
+                                    {isCreating && (
+                                        <>
+                                        <div>
+                                            <label htmlFor="stockQuantity" className="block text-sm font-medium text-gray-700">Quantidade Inicial</label>
+                                            <Input id="stockQuantity" name="stockQuantity" type="number" value={itemToEdit.stockQuantity || 0} onChange={handleEditInputChange} />
+                                        </div>
+                                        <div>
+                                            <label htmlFor="avgUnitValue" className="block text-sm font-medium text-gray-700">Valor Médio Unitário</label>
+                                            <Input id="avgUnitValue" name="avgUnitValue" type="number" value={itemToEdit.avgUnitValue || 0} onChange={handleEditInputChange} />
+                                        </div>
+                                        </>
+                                    )}
+                                </div>
+                                {!isCreating && (
+                                    <div className="pt-2">
+                                        <p className="text-xs text-gray-500">A quantidade em estoque e o valor são atualizados automaticamente através das entradas, saídas e inventário.</p>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                        
+                        {modalTab === 'bulk' && (
+                             <div className="space-y-4">
+                                <div className="p-4 border border-dashed rounded-lg text-center">
+                                    <UploadIcon />
+                                    <p className="mt-2 text-sm text-gray-600">Arraste e solte o arquivo CSV aqui, ou</p>
+                                    <Button type="button" onClick={() => bulkFileInputRef.current?.click()} className="mt-2">
+                                        Selecione o Arquivo
+                                    </Button>
+                                     <input type="file" ref={bulkFileInputRef} onChange={handleFileParse} accept=".csv" className="hidden" />
+                                </div>
+                                <div className="text-xs text-gray-500 bg-gray-50 p-3 rounded-md">
+                                    <p className="font-bold">Formato do CSV:</p>
+                                    <p className="font-mono">code,description,category,location,unit,stockQuantity,minQuantity,equipment(opcional)</p>
+                                    <p className="mt-1">A primeira linha deve ser o cabeçalho. `stockQuantity` e `minQuantity` serão 0 se não informados.</p>
+                                </div>
+                                {parsedData && (
+                                    <div className="space-y-4 max-h-60 overflow-y-auto">
+                                        {parsedData.validItems.length > 0 && (
+                                            <div>
+                                                <h4 className="font-semibold text-green-700">{parsedData.validItems.length} Itens Válidos para Importar:</h4>
+                                                <ul className="text-sm list-disc pl-5">
+                                                    {parsedData.validItems.map(item => <li key={item.code}>{item.code} - {item.description}</li>)}
+                                                </ul>
+                                            </div>
+                                        )}
+                                        {parsedData.errors.length > 0 && (
+                                            <div>
+                                                <h4 className="font-semibold text-red-700">{parsedData.errors.length} Erros Encontrados:</h4>
+                                                <ul className="text-sm list-disc pl-5 text-red-600">
+                                                    {parsedData.errors.map((err, i) => <li key={i}>{err}</li>)}
+                                                </ul>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
                         <div className="flex justify-end gap-4 pt-4">
                             <Button onClick={closeEditModal} className="bg-gray-200 text-gray-800 hover:bg-gray-300">
                                 Cancelar
                             </Button>
-                            <Button onClick={handleSaveItem}>
-                                {isCreating ? 'Criar Item' : 'Salvar Alterações'}
-                            </Button>
+                             {modalTab === 'form' && (
+                                <Button onClick={handleSaveItem}>
+                                    {isCreating ? 'Criar Item' : 'Salvar Alterações'}
+                                </Button>
+                            )}
+                            {modalTab === 'bulk' && (
+                                <Button onClick={handleConfirmBulkImport} disabled={!parsedData || parsedData.validItems.length === 0}>
+                                    Importar {parsedData?.validItems.length || 0} Itens
+                                </Button>
+                            )}
                         </div>
-                    </div>
+                    </>
                 )}
             </Modal>
             

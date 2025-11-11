@@ -12,7 +12,7 @@ export interface User {
 }
 
 export interface Item {
-  id: string;
+  id:string;
   code: string;
   description: string;
   category: string;
@@ -24,6 +24,7 @@ export interface Item {
   avgUnitValue: number;
   totalValue: number;
   preferredSupplierId?: string;
+  equipment?: string;
 }
 
 export interface Supplier {
